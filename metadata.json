@@ -1,0 +1,6 @@
+{
+  "name": "国泰君安期货机构持仓全景平台",
+  "description": "国泰君安期货机构一站式平台，提供三类席位仓位摘要、分类方向速览及机构一致性地图等核心数据分析与智能交互功能。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
