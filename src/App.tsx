@@ -772,12 +772,12 @@ export default function App() {
                       </div>
                       <div className="space-y-1.5 text-[10px] text-slate-600 font-sans">
                         <p>
-                          <strong className="text-slate-900">① 机构持仓流向共振：</strong>
-                          偏外资代理席位与国内主流机构席位在同一个合约方向上出现席位方向一致度高的共振建仓行为。
+                          <strong className="text-slate-900">① 主力一致同向共振：</strong>
+                          偏外资代理席位与国内主流机构席位表现出高度一致（共同偏多或共同偏空，即持仓存量同向且日内变动流量也同步加仓）。
                         </p>
                         <p>
-                          <strong className="text-slate-900">② 散户持仓方向分歧：</strong>
-                          偏零售或中原散户大单席位与上述机构席位呈现明显的持仓结构差异。主力席位持仓比重相对集聚，持仓分布更趋向于专业机构。
+                          <strong className="text-slate-900">② 散户与其方向相反：</strong>
+                          偏散户席位在持仓存量方向或今日流量变化上，与外资/机构主力的方向刚好相反（起到了逆向指标的强化确认作用）。
                         </p>
                         <p className="text-[9px] text-slate-400 border-t border-slate-100 pt-1.5 leading-tight">
                           *合规提示：此数据仅对公开持仓结存量进行博弈特征计算，不构成买卖保证。期货市场高杠杆风险极高，请独立决策。

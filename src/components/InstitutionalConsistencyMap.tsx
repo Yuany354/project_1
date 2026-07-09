@@ -88,23 +88,26 @@ export default function InstitutionalConsistencyMap({
     let maxOICommodity: Commodity | null = null;
 
     commodities.forEach(c => {
-      const xVal = c.positions[axisNames.xKey];
-      const yVal = c.positions[axisNames.yKey];
-      const thirdVal = c.positions[axisNames.thirdKey];
+      const f = c.positions.foreign;
+      const i = c.positions.institutional;
+      const r = c.positions.retail;
 
-      // Biased Long: Both active dimensions are positive
-      const isLong = xVal > 0 && yVal > 0;
-      // Biased Short: Both active dimensions are negative
-      const isShort = xVal < 0 && yVal < 0;
-      // Extreme Consistency: Active dimensions are long, third (unselected) dimension is short
-      const isStrong = xVal > 0 && yVal > 0 && thirdVal < 0;
+      const fChg = c.changes.foreign;
+      const iChg = c.changes.institutional;
+      const rChg = c.changes.retail;
 
-      if (isStrong) {
-        strongest++;
-      } else if (isLong) {
+      const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
+      const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
+      const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
+
+      if (isLong) {
         biasedLong++;
       } else if (isShort) {
         biasedShort++;
+      }
+
+      if (isStrong) {
+        strongest++;
       }
 
       if (!maxOICommodity || c.openInterest > maxOICommodity.openInterest) {
@@ -118,7 +121,7 @@ export default function InstitutionalConsistencyMap({
       strongest,
       maxOI: maxOICommodity as Commodity | null
     };
-  }, [commodities, axisNames]);
+  }, [commodities]);
 
   // Dimensions of the coordinate plane
   const width = 600;
@@ -153,18 +156,22 @@ export default function InstitutionalConsistencyMap({
 
   // Map categories of signals
   const getSignalCategory = (c: Commodity) => {
-    const xVal = c.positions[axisNames.xKey];
-    const yVal = c.positions[axisNames.yKey];
-    const thirdVal = c.positions[axisNames.thirdKey];
+    const f = c.positions.foreign;
+    const i = c.positions.institutional;
+    const r = c.positions.retail;
 
-    if (xVal > 0 && yVal > 0) {
-      if (thirdVal < 0) return 'strong'; // Extreme consistency: Selected dimensions long, third is short
-      return 'long'; // Joint Long
-    }
-    if (xVal < 0 && yVal < 0) {
-      return 'short'; // Joint Short
-    }
-    return 'mixed'; // Mixed opinions
+    const fChg = c.changes.foreign;
+    const iChg = c.changes.institutional;
+    const rChg = c.changes.retail;
+
+    const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
+    const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
+    const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
+
+    if (isStrong) return 'strong';
+    if (isLong) return 'long';
+    if (isShort) return 'short';
+    return 'mixed';
   };
 
   const handleMouseMove = (e: React.MouseEvent, c: Commodity) => {
@@ -470,9 +477,9 @@ export default function InstitutionalConsistencyMap({
                     </div>
                     <div className="text-slate-300">
                       • <span className="text-amber-400 font-medium">当前信号</span>: 
-                      {getSignalCategory(hoveredCommodity) === 'strong' && " 加强 (外资/机构共同做多，散户做空)"}
-                      {getSignalCategory(hoveredCommodity) === 'long' && " 共同偏多 (主力一致多头)"}
-                      {getSignalCategory(hoveredCommodity) === 'short' && " 共同偏空 (主力一致空头)"}
+                      {getSignalCategory(hoveredCommodity) === 'strong' && " 加强 (外资/机构一致同向，散户反向)"}
+                      {getSignalCategory(hoveredCommodity) === 'long' && " 偏多 (外资/机构流量和存量均增长)"}
+                      {getSignalCategory(hoveredCommodity) === 'short' && " 偏空 (外资/机构流量和存量均减少)"}
                       {getSignalCategory(hoveredCommodity) === 'mixed' && " 席位分歧 (资金博弈无共识)"}
                     </div>
                   </div>
@@ -499,18 +506,18 @@ export default function InstitutionalConsistencyMap({
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-slate-500 flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span>
-                      偏多信号数 (双向做多)
+                      偏多信号数 (一致偏多)
                     </span>
                     <span className="font-mono font-bold text-slate-800">{stats.biasedLong} 个</span>
                   </div>
                   <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                     <div 
-                      className="bg-red-500 h-full transition-all duration-500" 
+                     className="bg-red-500 h-full transition-all duration-500" 
                       style={{ width: `${(stats.biasedLong / commodities.length) * 100}%` }}
                     />
                   </div>
                   <span className="text-[9px] text-slate-400 block mt-0.5">
-                    外资与机构均为多头，反映主力看涨
+                    外资与机构流量和存量均增长，反映主力看涨
                   </span>
                 </div>
 
@@ -519,7 +526,7 @@ export default function InstitutionalConsistencyMap({
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-slate-500 flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
-                      偏空信号数 (双向做空)
+                      偏空信号数 (一致偏空)
                     </span>
                     <span className="font-mono font-bold text-slate-800">{stats.biasedShort} 个</span>
                   </div>
@@ -530,7 +537,7 @@ export default function InstitutionalConsistencyMap({
                     />
                   </div>
                   <span className="text-[9px] text-slate-400 block mt-0.5">
-                    外资与机构均为空头，反映主力看跌
+                    外资与机构流量和存量均减少，反映主力看跌
                   </span>
                 </div>
 

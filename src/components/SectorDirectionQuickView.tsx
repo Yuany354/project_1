@@ -46,10 +46,15 @@ export default function SectorDirectionQuickView({
       const i = c.positions.institutional;
       const r = c.positions.retail;
 
-      // Holding signal: foreign and institutional in the same direction (both positive or both negative)
-      const hasSignal = (f > 0 && i > 0) || (f < 0 && i < 0);
-      // Extreme consistency signal: both foreign and institutional long, retail short
-      const isStrong = f > 0 && i > 0 && r < 0;
+      const fChg = c.changes.foreign;
+      const iChg = c.changes.institutional;
+      const rChg = c.changes.retail;
+
+      const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
+      const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
+      const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
+
+      const hasSignal = isLong || isShort;
 
       if (hasSignal) signalCount++;
       if (isStrong) strongestCount++;
@@ -161,7 +166,12 @@ export default function SectorDirectionQuickView({
                     const f = c.positions.foreign;
                     const i = c.positions.institutional;
                     const r = c.positions.retail;
-                    const isStrong = f > 0 && i > 0 && r < 0;
+                    const fChg = c.changes.foreign;
+                    const iChg = c.changes.institutional;
+                    const rChg = c.changes.retail;
+                    const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
+                    const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
+                    const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
                     
                     return (
                       <span
