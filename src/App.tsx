@@ -199,14 +199,18 @@ export default function App() {
         const i = c.positions.institutional;
         const r = c.positions.retail;
 
-        const isLong = f > 0 && i > 0;
-        const isShort = f < 0 && i < 0;
-        const isStrong = f > 0 && i > 0 && r < 0;
+        const fChg = c.changes.foreign;
+        const iChg = c.changes.institutional;
+        const rChg = c.changes.retail;
+
+        const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
+        const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
+        const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
 
         if (activeFilter === 'strong') return isStrong;
-        if (activeFilter === 'long') return isLong && !isStrong; 
+        if (activeFilter === 'long') return isLong; 
         if (activeFilter === 'short') return isShort;
-        if (activeFilter === 'all') return isLong || isShort || isStrong;
+        if (activeFilter === 'all') return isLong || isShort;
         return true;
       });
     }
@@ -229,13 +233,19 @@ export default function App() {
           const f = c.positions.foreign;
           const i = c.positions.institutional;
           const r = c.positions.retail;
-          const isLong = f > 0 && i > 0;
-          const isShort = f < 0 && i < 0;
-          const isStrong = f > 0 && i > 0 && r < 0;
+
+          const fChg = c.changes.foreign;
+          const iChg = c.changes.institutional;
+          const rChg = c.changes.retail;
+
+          const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
+          const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
+          const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
+
           if (activeFilter === 'strong') return isStrong;
-          if (activeFilter === 'long') return isLong && !isStrong;
+          if (activeFilter === 'long') return isLong;
           if (activeFilter === 'short') return isShort;
-          if (activeFilter === 'all') return isLong || isShort || isStrong;
+          if (activeFilter === 'all') return isLong || isShort;
           return true;
         });
       }

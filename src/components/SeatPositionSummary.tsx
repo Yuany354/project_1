@@ -24,18 +24,22 @@ export default function SeatPositionSummary({
   // Filter commodities based on activeFilter for summary cards
   const filteredCommoditiesForSummary = activeFilter
     ? commodities.filter(c => {
-        const evalRes = getCommodityEvaluation(c);
         const f = c.positions.foreign;
         const i = c.positions.institutional;
+        const r = c.positions.retail;
 
-        const isStrong = evalRes.label === '加强';
-        const isLong = f > 0 && i > 0;
-        const isShort = f < 0 && i < 0;
+        const fChg = c.changes.foreign;
+        const iChg = c.changes.institutional;
+        const rChg = c.changes.retail;
+
+        const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
+        const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
+        const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
 
         if (activeFilter === 'strong') return isStrong;
-        if (activeFilter === 'long') return isLong && !isStrong;
+        if (activeFilter === 'long') return isLong;
         if (activeFilter === 'short') return isShort;
-        if (activeFilter === 'all') return isLong || isShort || isStrong;
+        if (activeFilter === 'all') return isLong || isShort;
         return true;
       })
     : commodities;
@@ -56,27 +60,32 @@ export default function SeatPositionSummary({
   let signalOpenInterestSum = 0;
 
   commodities.forEach(c => {
-    const evalRes = getCommodityEvaluation(c);
     const f = c.positions.foreign;
     const i = c.positions.institutional;
+    const r = c.positions.retail;
 
-    const isStrong = evalRes.label === '加强';
-    const isLong = f > 0 && i > 0;
-    const isShort = f < 0 && i < 0;
+    const fChg = c.changes.foreign;
+    const iChg = c.changes.institutional;
+    const rChg = c.changes.retail;
 
-    if (isStrong) {
-      strongestCount++;
-      signalOpenInterestSum += c.openInterest;
-    } else if (isLong) {
+    const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
+    const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
+    const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
+
+    if (isLong) {
       biasedLongCount++;
       signalOpenInterestSum += c.openInterest;
     } else if (isShort) {
       biasedShortCount++;
       signalOpenInterestSum += c.openInterest;
     }
+
+    if (isStrong) {
+      strongestCount++;
+    }
   });
 
-  const totalDivergenceSignals = biasedLongCount + biasedShortCount + strongestCount;
+  const totalDivergenceSignals = biasedLongCount + biasedShortCount;
 
   // Format currency/funds (China standard: Positive is +, Negative is -)
   const formatFund = (num: number) => {
