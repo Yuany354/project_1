@@ -412,8 +412,8 @@ export default function InstitutionalConsistencyMap({
                     </div>
                     <div className="text-slate-300">
                       • <span className="text-amber-400 font-medium">当前信号</span>: 
-                      {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'long' && " 偏多 (自定义)"}
-                      {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'short' && " 偏空 (自定义)"}
+                      {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'long' && " 偏多"}
+                      {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'short' && " 偏空"}
                       {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'none' && " 无"}
                       {isOriginalStrongSignal(hoveredCommodity) && " (重点关注)"}
                     </div>
@@ -486,7 +486,7 @@ export default function InstitutionalConsistencyMap({
                   <div className="p-3 bg-red-50/50 rounded-xl border border-red-100/60 text-center shadow-3xs">
                     <div className="text-[10px] text-red-600 font-extrabold flex items-center justify-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span>
-                      自定义偏多
+                      偏多
                     </div>
                     <div className="font-mono font-black text-red-950 text-base mt-1">
                       {stats.biasedLong} <span className="text-[10px] font-normal text-red-700">个</span>
@@ -496,7 +496,7 @@ export default function InstitutionalConsistencyMap({
                   <div className="p-3 bg-green-50/50 rounded-xl border border-green-100/60 text-center shadow-3xs">
                     <div className="text-[10px] text-green-600 font-extrabold flex items-center justify-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
-                      自定义偏空
+                      偏空
                     </div>
                     <div className="font-mono font-black text-green-950 text-base mt-1">
                       {stats.biasedShort} <span className="text-[10px] font-normal text-green-700">个</span>

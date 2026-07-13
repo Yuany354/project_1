@@ -35,8 +35,8 @@ export const DEFAULT_SIGNAL_CONFIG: SignalConfig = {
   short_stock_short: true,
   short_flow_long: false,
   short_flow_short: true,
-  short_retail_same: false,
-  short_retail_opposite: true,
+  short_retail_same: true,
+  short_retail_opposite: false,
 };
 
 export function getCommodityCustomSignal(

@@ -942,17 +942,20 @@ export default function App() {
                         <div className="bg-blue-50/40 border border-blue-100 rounded-xl p-3 text-[11px] space-y-1.5 leading-relaxed text-slate-700">
                           <div className="font-extrabold text-blue-900 flex items-center gap-1">
                             <Lightbulb className="w-3.5 h-3.5 text-blue-600" />
-                            <span>💡 信号默认配置规则说明</span>
+                            <span>💡 信号配置默认规则参考说明</span>
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-0.5">
-                            <div>
-                              <span className="font-bold text-red-700">■ 偏多默认设置</span>: <b>存量偏多 + 流量流入 + 零售同向。</b>
-                              <p className="text-[10.5px] text-slate-500 mt-0.5">当主力持仓存量偏多，且日内主力资金流入，且零售资金同向跟风买入时触发，指示极佳的突破趋势向上共识形态。</p>
-                            </div>
-                            <div>
-                              <span className="font-bold text-green-700">■ 偏空默认设置</span>: <b>存量偏空 + 流量流出 + 零售反向。</b>
-                              <p className="text-[10.5px] text-slate-500 mt-0.5">当主力持仓存量偏空，且日内主力资金流出，且零售资金逆势（散户反向做多/零售接盘）时触发，指示清晰的主力筹码派发形态。</p>
-                            </div>
+                          <div className="pt-0.5">
+                            {signalConfigTab === 'long' ? (
+                              <div>
+                                <span className="font-bold text-red-700">■ 偏多默认推荐配置</span>: <b>存量偏多 + 流量流入 + 零售同向。</b>
+                                <p className="text-[10.5px] text-slate-500 mt-0.5">当主力持仓底仓偏多、日内资金净流入，且零售资金同向跟风买入时触发，指示极佳的突破趋势向上共识形态。</p>
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="font-bold text-green-700">■ 偏空默认推荐配置</span>: <b>存量偏空 + 流量流出 + 零售同向。</b>
+                                <p className="text-[10.5px] text-slate-500 mt-0.5">当主力持仓底仓偏空、日内资金净流出，且零售资金同向跟风卖出时触发，指示顺势的突破趋势向下共识形态。</p>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -960,7 +963,7 @@ export default function App() {
                         <div className="flex items-start gap-1.5 bg-amber-50 text-amber-800 px-3.5 py-2.5 rounded-lg border border-amber-100/80 leading-normal text-[10px] mt-2">
                           <span className="font-extrabold shrink-0 bg-amber-100 px-1 py-0.2 rounded text-[9.5px]">法律声明</span>
                           <span className="text-slate-600 font-sans font-medium">
-                            【免责声明】本信号配置功能允许用户根据自身交易风格自主设置筛选参数。系统展示的所有默认配置、推荐选项及提示信息均不代表我司对市场走势的预测，亦不构成任何期货买卖的主动推荐或实质性投资建议。期货交易具有高杠杆及高风险特征，投资者据此操作风险自担，请务必审慎独立决策。
+                            【免责声明】本信号配置功能中展示的系统默认选项与推荐组合仅作为量化博弈特征研究的设置示例参考，不代表我司对任何市场走势的预测或实质性投资建议，最终信号判别以用户自主选定并启用的实际规则为准。期货市场具有高杠杆及高风险特征，请自主、审慎进行交易配置，投资风险自担。
                           </span>
                         </div>
                       </div>
