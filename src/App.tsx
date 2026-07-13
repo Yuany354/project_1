@@ -16,6 +16,12 @@ import SectorDirectionQuickView from './components/SectorDirectionQuickView';
 import InstitutionalConsistencyMap from './components/InstitutionalConsistencyMap';
 import EvaluationBadge, { getCommodityEvaluation } from './components/EvaluationBadge';
 import { 
+  getCommodityCustomSignal, 
+  isOriginalStrongSignal, 
+  DEFAULT_SIGNAL_CONFIG,
+  SignalConfig
+} from './utils/signal';
+import { 
   Calendar, 
   Search,
   Star,
@@ -44,18 +50,28 @@ import {
   Building2,
   Users,
   X,
-  ThumbsUp
+  ThumbsUp,
+  ArrowUpRight,
+  ArrowDownRight,
+  Lightbulb,
+  SlidersHorizontal
 } from 'lucide-react';
 
 export default function App() {
   // States
   const [viewMode, setViewMode] = useState<'main' | 'companyFilter'>('main');
   const [focusedSeatType, setFocusedSeatType] = useState<'foreign' | 'institutional' | 'retail'>('foreign');
-  const [selectedCompanies, setSelectedCompanies] = useState<Record<'foreign' | 'institutional' | 'retail', string[]>>({
-    foreign: ['摩根大通期货', '乾坤期货', '瑞银证券', '高盛工银期货', '汇丰前海证券'],
-    institutional: ['国泰君安期货', '中信期货', '永安期货', '东证期货', '华泰期货', '银河期货', '广发期货', '申银万国期货'],
-    retail: ['东方财富期货', '中原期货', '平安证券期货']
+  const [selectedCompanies, setSelectedCompanies] = useState<Record<string, Record<'foreign' | 'institutional' | 'retail', string[]>>>({
+    global: {
+      foreign: ['摩根大通期货', '乾坤期货', '瑞银证券', '高盛工银期货', '汇丰前海证券'],
+      institutional: ['国泰君安期货', '中信期货', '永安期货', '东证期货', '华泰期货', '银河期货', '广发期货', '申银万国期货'],
+      retail: ['东方财富期货', '中原期货', '平安证券期货']
+    }
   });
+
+  const [signalConfig, setSignalConfig] = useState<SignalConfig>(DEFAULT_SIGNAL_CONFIG);
+  const [signalConfigTab, setSignalConfigTab] = useState<'long' | 'short'>('long');
+  const [isSignalConfigOpen, setIsSignalConfigOpen] = useState<boolean>(false);
 
   const [activePortalTab, setActivePortalTab] = useState<string>('持仓透视');
   const [activePortalSubmenu, setActivePortalSubmenu] = useState<string>('机构持仓全景');
@@ -99,7 +115,7 @@ export default function App() {
   };
 
   const [selectedSector, setSelectedSector] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'long' | 'short' | 'strong' | null>(null);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'long' | 'short' | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [onlyShowFavorites, setOnlyShowFavorites] = useState<boolean>(false);
   const [compareMode, setCompareMode] = useState<'single' | 'multi'>('single');
@@ -128,24 +144,28 @@ export default function App() {
   const rawCommodities = useMemo(() => {
     const base = COMMODITIES_BY_DATE[effectiveDate] || COMMODITIES_BY_DATE["2026.06.29"];
     
-    // Compute scaling factors based on active company list sizes compared to defaults
-    const foreignWeight = selectedCompanies.foreign.length / 5;
-    const institutionalWeight = selectedCompanies.institutional.length / 8;
-    const retailWeight = selectedCompanies.retail.length / 3;
+    return base.map(item => {
+      // Resolve configuration for this specific variety; fallback to global
+      const config = selectedCompanies[item.id] || selectedCompanies.global;
+      
+      const foreignWeight = (config.foreign?.length || 0) / 5;
+      const institutionalWeight = (config.institutional?.length || 0) / 8;
+      const retailWeight = (config.retail?.length || 0) / 3;
 
-    return base.map(item => ({
-      ...item,
-      positions: {
-        foreign: item.positions.foreign * foreignWeight,
-        institutional: item.positions.institutional * institutionalWeight,
-        retail: item.positions.retail * retailWeight
-      },
-      changes: {
-        foreign: item.changes.foreign * foreignWeight,
-        institutional: item.changes.institutional * institutionalWeight,
-        retail: item.changes.retail * retailWeight
-      }
-    }));
+      return {
+        ...item,
+        positions: {
+          foreign: item.positions.foreign * foreignWeight,
+          institutional: item.positions.institutional * institutionalWeight,
+          retail: item.positions.retail * retailWeight
+        },
+        changes: {
+          foreign: item.changes.foreign * foreignWeight,
+          institutional: item.changes.institutional * institutionalWeight,
+          retail: item.changes.retail * retailWeight
+        }
+      };
+    });
   }, [effectiveDate, selectedCompanies]);
 
   // Selected commodities for view/compare (single vs multiple)
@@ -195,28 +215,16 @@ export default function App() {
     // Filter by signal type
     if (activeFilter) {
       result = result.filter(c => {
-        const f = c.positions.foreign;
-        const i = c.positions.institutional;
-        const r = c.positions.retail;
-
-        const fChg = c.changes.foreign;
-        const iChg = c.changes.institutional;
-        const rChg = c.changes.retail;
-
-        const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
-        const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
-        const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
-
-        if (activeFilter === 'strong') return isStrong;
-        if (activeFilter === 'long') return isLong; 
-        if (activeFilter === 'short') return isShort;
-        if (activeFilter === 'all') return isLong || isShort;
+        const sig = getCommodityCustomSignal(c, signalConfig);
+        if (activeFilter === 'long') return sig === 'long'; 
+        if (activeFilter === 'short') return sig === 'short';
+        if (activeFilter === 'all') return sig === 'long' || sig === 'short';
         return true;
       });
     }
 
     return result;
-  }, [rawCommodities, selectedSector, searchQuery, onlyShowFavorites, favorites, activeFilter]);
+  }, [rawCommodities, selectedSector, searchQuery, onlyShowFavorites, favorites, activeFilter, signalConfig]);
 
   const currentSectionsDataset = useMemo(() => {
     if (compareMode === 'multi') {
@@ -230,22 +238,10 @@ export default function App() {
       let result = [...selectedCommoditiesList];
       if (activeFilter) {
         result = result.filter(c => {
-          const f = c.positions.foreign;
-          const i = c.positions.institutional;
-          const r = c.positions.retail;
-
-          const fChg = c.changes.foreign;
-          const iChg = c.changes.institutional;
-          const rChg = c.changes.retail;
-
-          const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
-          const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
-          const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
-
-          if (activeFilter === 'strong') return isStrong;
-          if (activeFilter === 'long') return isLong;
-          if (activeFilter === 'short') return isShort;
-          if (activeFilter === 'all') return isLong || isShort;
+          const sig = getCommodityCustomSignal(c, signalConfig);
+          if (activeFilter === 'long') return sig === 'long';
+          if (activeFilter === 'short') return sig === 'short';
+          if (activeFilter === 'all') return sig === 'long' || sig === 'short';
           return true;
         });
       }
@@ -256,7 +252,7 @@ export default function App() {
       return result;
     }
     return filteredCommodities;
-  }, [compareMode, selectedCommoditiesList, filteredCommodities, activeFilter, searchQuery]);
+  }, [compareMode, selectedCommoditiesList, filteredCommodities, activeFilter, searchQuery, signalConfig]);
 
   // Sorting data logic for Section 04 Core Variety Panorama
   const sortedTableData = useMemo(() => {
@@ -552,6 +548,7 @@ export default function App() {
           initialSeatType={focusedSeatType}
           selectedCompanies={selectedCompanies}
           onUpdateCompanies={setSelectedCompanies}
+          commodities={rawCommodities.map(c => ({ id: c.id, name: c.name }))}
         />
       ) : (
         <div className="w-full max-w-[1750px] mx-auto px-4 py-6">
@@ -637,7 +634,7 @@ export default function App() {
                           : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
                       }`}
                     >
-                      全品种透视
+                      全品种全景
                     </button>
                     <button
                       onClick={() => {
@@ -650,7 +647,7 @@ export default function App() {
                           : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
                       }`}
                     >
-                      筛选品种透视
+                      自选品种透视
                     </button>
                   </div>
                   {compareMode === 'multi' && (
@@ -726,67 +723,250 @@ export default function App() {
               </div>
 
               {/* Row 2: Signal Feature Selectors */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <span className="text-xs text-slate-500 font-bold font-sans flex items-center gap-1 shrink-0 whitespace-nowrap">
-                  <Activity className="w-3.5 h-3.5 text-blue-600" />
-                  <span>信号筛选:</span>
-                </span>
-                <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200/60 relative w-full sm:w-auto">
-                  {[
-                    { value: null, label: '全部' },
-                    { value: 'strong', label: '加强', isStrong: true },
-                    { value: 'long', label: '偏多' },
-                    { value: 'short', label: '偏空' }
-                  ].map(opt => {
-                    const isStrong = opt.isStrong;
-                    return (
-                      <div
-                        key={opt.label}
-                        className="relative"
-                        onMouseEnter={() => { if (isStrong) setHoveringStrong(true); }}
-                        onMouseLeave={() => { if (isStrong) setHoveringStrong(false); }}
-                      >
-                        <button
-                          onClick={() => setActiveFilter(opt.value as any)}
-                          className={`px-5 py-1.5 text-xs rounded-md font-bold transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
-                            activeFilter === opt.value
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-                          }`}
-                        >
-                          <span className="whitespace-nowrap">{opt.label}</span>
-                          {isStrong && (
-                            <HelpCircle className="w-3.5 h-3.5 opacity-60 hover:opacity-100 text-slate-500 shrink-0" />
-                          )}
-                        </button>
-                      </div>
-                    );
-                  })}
-
-                  {/* COMPLIANT INSTITUTIONAL "STRONG" DEFINITION POPUP */}
-                  {hoveringStrong && (
-                    <div className="absolute left-0 sm:left-1/2 sm:-translate-x-1/2 top-full mt-2 w-72 bg-white border border-slate-200 rounded-lg p-3 shadow-xl z-50 text-left text-xs text-slate-700 leading-relaxed animate-in fade-in duration-150">
-                      <div className="flex items-center gap-1.5 text-blue-800 font-bold mb-1.5 pb-1 border-b border-slate-100">
-                        <BookmarkCheck className="w-4 h-4 text-blue-600" />
-                        <span>「加强」信号合规释义</span>
-                      </div>
-                      <div className="space-y-1.5 text-[10px] text-slate-600 font-sans">
-                        <p>
-                          <strong className="text-slate-900">① 主力一致同向共振：</strong>
-                          偏外资代理席位与国内主流机构席位表现出高度一致（共同偏多或共同偏空，即持仓存量同向且日内变动流量也同步加仓）。
-                        </p>
-                        <p>
-                          <strong className="text-slate-900">② 散户与其方向相反：</strong>
-                          偏散户席位在持仓存量方向或今日流量变化上，与外资/机构主力的方向刚好相反（起到了逆向指标的强化确认作用）。
-                        </p>
-                        <p className="text-[9px] text-slate-400 border-t border-slate-100 pt-1.5 leading-tight">
-                          *合规提示：此数据仅对公开持仓结存量进行博弈特征计算，不构成买卖保证。期货市场高杠杆风险极高，请独立决策。
-                        </p>
-                      </div>
-                      <div className="absolute top-0 left-6 sm:left-1/2 sm:-translate-x-1/2 -mt-1 w-2 h-2 bg-white border-t border-l border-slate-200 rotate-45"></div>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <span className="text-xs text-slate-500 font-bold font-sans flex items-center gap-1 shrink-0 whitespace-nowrap">
+                      <Activity className="w-3.5 h-3.5 text-blue-600" />
+                      <span>信号筛选:</span>
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200/60 relative w-full sm:w-auto">
+                      {[
+                        { value: null, label: '全部' },
+                        { value: 'long', label: '偏多' },
+                        { value: 'short', label: '偏空' }
+                      ].map(opt => {
+                        return (
+                          <button
+                            key={opt.label}
+                            onClick={() => setActiveFilter(opt.value as any)}
+                            className={`px-5 py-1.5 text-xs rounded-md font-bold transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
+                              activeFilter === opt.value
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                            }`}
+                          >
+                            <span className="whitespace-nowrap">{opt.label}</span>
+                          </button>
+                        );
+                      })}
                     </div>
-                  )}
+                  </div>
+
+                  {/* Signal Config Button on the right */}
+                  <button
+                    onClick={() => setIsSignalConfigOpen(!isSignalConfigOpen)}
+                    className={`px-3 py-1.5 text-xs rounded-lg font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isSignalConfigOpen
+                        ? 'bg-blue-50 text-blue-700 border-blue-300 shadow-xs'
+                        : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs'
+                    }`}
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    <span>信号配置</span>
+                    <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform duration-200 ${isSignalConfigOpen ? 'rotate-180' : ''}`} />
+                  </button>
                 </div>
+
+                {/* Dropdown Signal Configuration Panel */}
+                <AnimatePresence>
+                  {isSignalConfigOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 space-y-4 text-xs mt-1 shadow-2xs">
+                        {/* Header Panel */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200/60 pb-3 gap-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                            <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
+                              <SlidersHorizontal className="w-4 h-4 text-blue-600" />
+                              <span>⚙️ 信号配置</span>
+                            </h4>
+                            {/* Toggle switcher between bullish and bearish configuration */}
+                            <div className="flex bg-slate-200/80 p-0.5 rounded-lg border border-slate-300 text-xs self-start">
+                              <button
+                                onClick={() => setSignalConfigTab('long')}
+                                className={`px-3 py-1 rounded transition-all cursor-pointer flex items-center gap-1 font-bold ${
+                                  signalConfigTab === 'long' 
+                                    ? 'bg-white text-red-700 border border-slate-200 shadow-xs' 
+                                    : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                <span>偏多信号配置</span>
+                              </button>
+                              <button
+                                onClick={() => setSignalConfigTab('short')}
+                                className={`px-3 py-1 rounded transition-all cursor-pointer flex items-center gap-1 font-bold ${
+                                  signalConfigTab === 'short' 
+                                    ? 'bg-white text-green-700 border border-slate-200 shadow-xs' 
+                                    : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                <span>偏空信号配置</span>
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <button
+                            onClick={() => setSignalConfig(DEFAULT_SIGNAL_CONFIG)}
+                            className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer shadow-3xs self-start sm:self-center shrink-0"
+                          >
+                            <RotateCcw className="w-3 h-3 text-slate-500" />
+                            <span>恢复系统默认配置</span>
+                          </button>
+                        </div>
+
+                        {/* Precise 2-Column 3-Row Grid Layout for Selected Signal */}
+                        <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-3xs">
+                          {/* Grid Header */}
+                          <div className="grid grid-cols-12 bg-slate-50/50 border-b border-slate-200 font-bold text-slate-700 p-2.5 text-xs text-center">
+                            <div className="col-span-4 text-left pl-2">监控维度 & 业务含义说明</div>
+                            <div className="col-span-8 text-left pl-4">筛选条件组合（勾选即启用为该信号的必要触发条件，不勾选即不设置）</div>
+                          </div>
+
+                          {/* Row 1: 持仓存量 */}
+                          <div className="grid grid-cols-12 border-b border-slate-200 items-center">
+                            <div className="col-span-4 bg-slate-50/20 p-3 font-bold text-slate-700 border-r border-slate-200 pl-4.5">
+                              <div>持仓存量 (Stock)</div>
+                              <p className="text-[10px] text-slate-400 font-normal mt-0.5 leading-normal">
+                                机构与外资的底仓持仓方向：偏多指多头底仓，偏空指空头底仓。
+                              </p>
+                            </div>
+                            <div className="col-span-8 p-3 pl-6 grid grid-cols-2 gap-4">
+                              <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
+                                <input 
+                                  type="checkbox" 
+                                  checked={signalConfigTab === 'long' ? signalConfig.long_stock_long : signalConfig.short_stock_long}
+                                  onChange={() => setSignalConfig(prev => ({
+                                    ...prev,
+                                    [signalConfigTab === 'long' ? 'long_stock_long' : 'short_stock_long']: !prev[signalConfigTab === 'long' ? 'long_stock_long' : 'short_stock_long']
+                                  }))}
+                                  className={`rounded border-slate-300 h-4 w-4 cursor-pointer ${signalConfigTab === 'long' ? 'text-red-600 focus:ring-red-500/20' : 'text-green-600 focus:ring-green-500/20'}`}
+                                />
+                                <span>主力持仓偏多</span>
+                              </label>
+                              <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
+                                <input 
+                                  type="checkbox" 
+                                  checked={signalConfigTab === 'long' ? signalConfig.long_stock_short : signalConfig.short_stock_short}
+                                  onChange={() => setSignalConfig(prev => ({
+                                    ...prev,
+                                    [signalConfigTab === 'long' ? 'long_stock_short' : 'short_stock_short']: !prev[signalConfigTab === 'long' ? 'long_stock_short' : 'short_stock_short']
+                                  }))}
+                                  className={`rounded border-slate-300 h-4 w-4 cursor-pointer ${signalConfigTab === 'long' ? 'text-red-600 focus:ring-red-500/20' : 'text-green-600 focus:ring-green-500/20'}`}
+                                />
+                                <span>主力持仓偏空</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          {/* Row 2: 资金流量 */}
+                          <div className="grid grid-cols-12 border-b border-slate-200 items-center">
+                            <div className="col-span-4 bg-slate-50/20 p-3 font-bold text-slate-700 border-r border-slate-200 pl-4.5">
+                              <div>资金流量 (Flow)</div>
+                              <p className="text-[10px] text-slate-400 font-normal mt-0.5 leading-normal">
+                                今日主力资金的日内变动：流入指一致做多加仓，流出指一致做空减仓。
+                              </p>
+                            </div>
+                            <div className="col-span-8 p-3 pl-6 grid grid-cols-2 gap-4">
+                              <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
+                                <input 
+                                  type="checkbox" 
+                                  checked={signalConfigTab === 'long' ? signalConfig.long_flow_long : signalConfig.short_flow_long}
+                                  onChange={() => setSignalConfig(prev => ({
+                                    ...prev,
+                                    [signalConfigTab === 'long' ? 'long_flow_long' : 'short_flow_long']: !prev[signalConfigTab === 'long' ? 'long_flow_long' : 'short_flow_long']
+                                  }))}
+                                  className={`rounded border-slate-300 h-4 w-4 cursor-pointer ${signalConfigTab === 'long' ? 'text-red-600 focus:ring-red-500/20' : 'text-green-600 focus:ring-green-500/20'}`}
+                                />
+                                <span>主力流量流入</span>
+                              </label>
+                              <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
+                                <input 
+                                  type="checkbox" 
+                                  checked={signalConfigTab === 'long' ? signalConfig.long_flow_short : signalConfig.short_flow_short}
+                                  onChange={() => setSignalConfig(prev => ({
+                                    ...prev,
+                                    [signalConfigTab === 'long' ? 'long_flow_short' : 'short_flow_short']: !prev[signalConfigTab === 'long' ? 'long_flow_short' : 'short_flow_short']
+                                  }))}
+                                  className={`rounded border-slate-300 h-4 w-4 cursor-pointer ${signalConfigTab === 'long' ? 'text-red-600 focus:ring-red-500/20' : 'text-green-600 focus:ring-green-500/20'}`}
+                                />
+                                <span>主力流量流出</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          {/* Row 3: 零售方向 */}
+                          <div className="grid grid-cols-12 items-center">
+                            <div className="col-span-4 bg-slate-50/20 p-3 font-bold text-slate-700 border-r border-slate-200 pl-4.5">
+                              <div>零售方向 (Retail)</div>
+                              <p className="text-[10px] text-slate-400 font-normal mt-0.5 leading-normal">
+                                零售散户与主力日内方向的关系：同向指散户跟风买卖，反向指散户逆势做对立。
+                              </p>
+                            </div>
+                            <div className="col-span-8 p-3 pl-6 grid grid-cols-2 gap-4">
+                              <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
+                                <input 
+                                  type="checkbox" 
+                                  checked={signalConfigTab === 'long' ? signalConfig.long_retail_same : signalConfig.short_retail_same}
+                                  onChange={() => setSignalConfig(prev => ({
+                                    ...prev,
+                                    [signalConfigTab === 'long' ? 'long_retail_same' : 'short_retail_same']: !prev[signalConfigTab === 'long' ? 'long_retail_same' : 'short_retail_same']
+                                  }))}
+                                  className={`rounded border-slate-300 h-4 w-4 cursor-pointer ${signalConfigTab === 'long' ? 'text-red-600 focus:ring-red-500/20' : 'text-green-600 focus:ring-green-500/20'}`}
+                                />
+                                <span>零售同向</span>
+                              </label>
+                              <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
+                                <input 
+                                  type="checkbox" 
+                                  checked={signalConfigTab === 'long' ? signalConfig.long_retail_opposite : signalConfig.short_retail_opposite}
+                                  onChange={() => setSignalConfig(prev => ({
+                                    ...prev,
+                                    [signalConfigTab === 'long' ? 'long_retail_opposite' : 'short_retail_opposite']: !prev[signalConfigTab === 'long' ? 'long_retail_opposite' : 'short_retail_opposite']
+                                  }))}
+                                  className={`rounded border-slate-300 h-4 w-4 cursor-pointer ${signalConfigTab === 'long' ? 'text-red-600 focus:ring-red-500/20' : 'text-green-600 focus:ring-green-500/20'}`}
+                                />
+                                <span>零售反向</span>
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Default Rules Explanations (Satisfying User's request to clarify default configurations) */}
+                        <div className="bg-blue-50/40 border border-blue-100 rounded-xl p-3 text-[11px] space-y-1.5 leading-relaxed text-slate-700">
+                          <div className="font-extrabold text-blue-900 flex items-center gap-1">
+                            <Lightbulb className="w-3.5 h-3.5 text-blue-600" />
+                            <span>💡 信号默认配置规则说明</span>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-0.5">
+                            <div>
+                              <span className="font-bold text-red-700">■ 偏多默认设置</span>: <b>存量偏多 + 流量流入 + 零售同向。</b>
+                              <p className="text-[10.5px] text-slate-500 mt-0.5">当主力持仓存量偏多，且日内主力资金流入，且零售资金同向跟风买入时触发，指示极佳的突破趋势向上共识形态。</p>
+                            </div>
+                            <div>
+                              <span className="font-bold text-green-700">■ 偏空默认设置</span>: <b>存量偏空 + 流量流出 + 零售反向。</b>
+                              <p className="text-[10.5px] text-slate-500 mt-0.5">当主力持仓存量偏空，且日内主力资金流出，且零售资金逆势（散户反向做多/零售接盘）时触发，指示清晰的主力筹码派发形态。</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Disclaimer - Polished and Written professionally (Satisfying User's request) */}
+                        <div className="flex items-start gap-1.5 bg-amber-50 text-amber-800 px-3.5 py-2.5 rounded-lg border border-amber-100/80 leading-normal text-[10px] mt-2">
+                          <span className="font-extrabold shrink-0 bg-amber-100 px-1 py-0.2 rounded text-[9.5px]">法律声明</span>
+                          <span className="text-slate-600 font-sans font-medium">
+                            【免责声明】本信号配置功能允许用户根据自身交易风格自主设置筛选参数。系统展示的所有默认配置、推荐选项及提示信息均不代表我司对市场走势的预测，亦不构成任何期货买卖的主动推荐或实质性投资建议。期货交易具有高杠杆及高风险特征，投资者据此操作风险自担，请务必审慎独立决策。
+                          </span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
@@ -902,25 +1082,29 @@ export default function App() {
                       setFocusedSeatType(seatType);
                       setViewMode('companyFilter');
                     }}
+                    signalConfig={signalConfig}
                   />
                 </div>
 
-            {/* 02. SECTOR DIRECTION QUICK VIEW (Show only selected in multi mode) */}
-            <SectorDirectionQuickView 
-              commodities={compareMode === 'multi' ? selectedCommoditiesList : rawCommodities}
-              selectedSector={selectedSector}
-              onSelectSector={setSelectedSector}
-              onSelectCommodity={handleSelectCommodity}
-              selectedCommodityId={selectedCommodity?.id || null}
-            />
+                {/* 02. SECTOR DIRECTION QUICK VIEW (Show only selected in multi mode) */}
+                <SectorDirectionQuickView 
+                  commodities={compareMode === 'multi' ? selectedCommoditiesList : rawCommodities}
+                  selectedSector={selectedSector}
+                  onSelectSector={setSelectedSector}
+                  onSelectCommodity={handleSelectCommodity}
+                  selectedCommodityId={selectedCommodity?.id || null}
+                  signalConfig={signalConfig}
+                />
 
-            {/* 03. INSTITUTIONAL CONSISTENCY MAP (Show only selected in multi mode) */}
-            <InstitutionalConsistencyMap 
-              commodities={compareMode === 'multi' ? selectedCommoditiesList : filteredCommodities}
-              selectedCommodity={selectedCommodity}
-              onSelectCommodity={handleSelectCommodity}
-              selectedSector={selectedSector}
-            />
+                {/* 03. INSTITUTIONAL CONSISTENCY MAP (Show only selected in multi mode) */}
+                <InstitutionalConsistencyMap 
+                  commodities={compareMode === 'multi' ? selectedCommoditiesList : filteredCommodities}
+                  selectedCommodity={selectedCommodity}
+                  onSelectCommodity={handleSelectCommodity}
+                  selectedSector={selectedSector}
+                  signalConfig={signalConfig}
+                  compareMode={compareMode}
+                />
 
             {/* 04. CORE VARIETY PANORAMA (Satisfies Request #3: Only keep core variety panorama table, remove top mover cards) */}
             <div className="mb-8" id="section-core-panorama">
@@ -932,9 +1116,19 @@ export default function App() {
                 </div>
               </div>
 
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3.5 mt-2 text-xs text-slate-500">
+                <div className="flex items-center gap-2">
+                  <Info className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>
+                    <strong>⚠️ 合规声明：</strong>此「核心品种全景」展示的多空预警信号及强力关注状态由席位历史持仓变动与流量拟合而来。
+                    <span className="text-blue-700 font-bold">以用户实际选择为准，默认配置仅供示意，不代表公司任何投资观点，不作为交易决策。</span>
+                  </span>
+                </div>
+              </div>
+
               <div className="bg-white border border-slate-200 rounded-lg overflow-visible shadow-sm mt-4">
                 <div className="overflow-x-auto overflow-visible">
-                  <table className="w-full text-left border-collapse text-xs table-fixed min-w-[1000px]">
+                  <table className="w-full text-left border-collapse text-xs table-fixed min-w-[1150px]">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-medium font-sans text-[11px]">
                         <th className="p-3 pl-4 w-12 text-center sticky left-0 bg-slate-50 z-40 border-r border-slate-200">自选</th>
@@ -946,7 +1140,7 @@ export default function App() {
                         </th>
                         <th 
                           onClick={() => handleSort('foreign')}
-                          className="p-3 w-36 cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                          className="p-3 w-32 cursor-pointer hover:bg-slate-100 transition-colors select-none"
                           title="点击按外资持仓量排序"
                         >
                           <div className="flex items-center gap-1">
@@ -960,7 +1154,7 @@ export default function App() {
                         </th>
                         <th 
                           onClick={() => handleSort('institutional')}
-                          className="p-3 w-36 cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                          className="p-3 w-32 cursor-pointer hover:bg-slate-100 transition-colors select-none"
                           title="点击按机构持仓量排序"
                         >
                           <div className="flex items-center gap-1">
@@ -974,19 +1168,20 @@ export default function App() {
                         </th>
                         <th 
                           onClick={() => handleSort('retail')}
-                          className="p-3 w-36 cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                          title="点击按散户持仓量排序"
+                          className="p-3 w-32 cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                          title="点击按零售持仓量排序"
                         >
                           <div className="flex items-center gap-1">
                             <Users className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                            <span>偏散户持仓</span>
+                            <span>偏零售持仓</span>
                             <span className="flex flex-col text-[8px] leading-[6px] text-slate-400">
                               <span className={sortField === 'retail' && sortDirection === 'asc' ? 'text-blue-600' : ''}>▲</span>
                               <span className={sortField === 'retail' && sortDirection === 'desc' ? 'text-blue-600' : ''}>▼</span>
                             </span>
                           </div>
                         </th>
-                        <th className="p-3 w-[180px]">三类席位今日变化 (单位: 亿)</th>
+                        <th className="p-3 w-[170px]">三类席位今日变化 (单位: 亿)</th>
+                        <th className="p-3 w-24 text-center">重点关注</th>
                         <th className="p-3 w-24 text-center">一致性状态</th>
                       </tr>
                     </thead>
@@ -1165,7 +1360,7 @@ export default function App() {
                               </div>
                             </td>
 
-                            {/* 偏散户持仓与条形图 */}
+                            {/* 偏零售持仓与条形图 */}
                             <td className="p-3">
                               <div className="flex flex-col gap-0.5">
                                 <span className={`font-mono font-bold ${rVal >= 0 ? 'text-red-600' : 'text-green-600'}`}>
@@ -1228,7 +1423,7 @@ export default function App() {
                                 {/* Retail Change */}
                                 <div className="flex items-center gap-1 leading-none justify-between">
                                   <div className="flex items-center gap-0.5 w-[54px] shrink-0">
-                                    <span className="text-[9px] text-slate-400 font-sans">散</span>
+                                    <span className="text-[9px] text-slate-400 font-sans">零</span>
                                     <Users className="w-2.5 h-2.5 text-slate-500 shrink-0" />
                                     <span className={`text-[8px] px-0.5 py-0.2 rounded-xs leading-normal font-sans font-bold text-center ${getChgBehaviorLabelAndStyle(rVal, rChg).style}`}>
                                       {getChgBehaviorLabelAndStyle(rVal, rChg).label}
@@ -1248,9 +1443,44 @@ export default function App() {
                               </div>
                             </td>
 
-                            {/* 一致性状态 */}
+                            {/* 重点关注 (Formerly 强力关注) */}
+                            <td className="p-3 text-center">
+                              {isOriginalStrongSignal(c) ? (
+                                <div className="inline-flex items-center justify-center gap-1 relative">
+                                  <span className="absolute -inset-1 bg-amber-400/20 blur-md rounded-full animate-ping"></span>
+                                  <span className="p-1 bg-amber-100 rounded-full text-amber-600 relative border border-amber-300 shadow-sm hover:scale-110 transition-transform cursor-help" title="双主力一致共振且偏零售席位方向相反，触发重点关注状态！">
+                                    <Lightbulb className="w-3.5 h-3.5 fill-amber-500 animate-pulse text-amber-600" />
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-slate-300 font-mono text-[10px]">—</span>
+                              )}
+                            </td>
+
+                            {/* 一致性状态 (Retained, but displaying long/short/- according to custom user-configured signal rules) */}
                             <td className="p-3 text-center overflow-visible">
-                              <EvaluationBadge commodity={c} showTooltipBelow={idx < 3} align="right" />
+                              {(() => {
+                                const sig = getCommodityCustomSignal(c, signalConfig);
+                                if (sig === 'long') {
+                                  return (
+                                    <span className="inline-flex items-center gap-0.5 bg-red-50 text-red-700 px-2 py-0.5 rounded-md font-sans font-extrabold text-[10px] border border-red-200 shadow-3xs">
+                                      <ArrowUpRight className="w-3 h-3 text-red-600 shrink-0" />
+                                      <span>偏多</span>
+                                    </span>
+                                  );
+                                } else if (sig === 'short') {
+                                  return (
+                                    <span className="inline-flex items-center gap-0.5 bg-green-50 text-green-700 px-2 py-0.5 rounded-md font-sans font-extrabold text-[10px] border border-green-200 shadow-3xs">
+                                      <ArrowDownRight className="w-3 h-3 text-green-600 shrink-0" />
+                                      <span>偏空</span>
+                                    </span>
+                                  );
+                                } else {
+                                  return (
+                                    <span className="text-slate-300 font-mono text-[10px]">—</span>
+                                  );
+                                }
+                              })()}
                             </td>
 
                           </tr>
@@ -1288,6 +1518,7 @@ export default function App() {
                   onSelectSector={setSelectedSector}
                   onSelectCommodity={handleSelectCommodity}
                   selectedCommodityId={selectedCommodity?.id || null}
+                  signalConfig={signalConfig}
                 />
 
                 <InstitutionalConsistencyMap 
@@ -1295,6 +1526,8 @@ export default function App() {
                   selectedCommodity={selectedCommodity}
                   onSelectCommodity={handleSelectCommodity}
                   selectedSector={selectedSector}
+                  signalConfig={signalConfig}
+                  compareMode={compareMode}
                 />
               </div>
             )}
@@ -1526,6 +1759,7 @@ export default function App() {
                     setFocusedSeatType(seatType);
                     setViewMode('companyFilter');
                   }}
+                  signalConfig={signalConfig}
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

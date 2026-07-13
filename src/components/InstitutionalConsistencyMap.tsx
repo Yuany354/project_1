@@ -7,26 +7,31 @@ import React, { useState, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Commodity, DimensionType } from '../types';
 import { Activity, Crosshair, HelpCircle } from 'lucide-react';
+import { getCommodityCustomSignal, isOriginalStrongSignal, SignalType, SignalConfig } from '../utils/signal';
 
 interface InstitutionalConsistencyMapProps {
   commodities: Commodity[];
   selectedCommodity: Commodity | null;
   onSelectCommodity: (commodity: Commodity) => void;
   selectedSector: string | null;
+  signalConfig: SignalConfig;
+  compareMode: 'single' | 'multi';
 }
 
 export default function InstitutionalConsistencyMap({
   commodities,
   selectedCommodity,
   onSelectCommodity,
-  selectedSector
+  selectedSector,
+  signalConfig,
+  compareMode
 }: InstitutionalConsistencyMapProps) {
   const [dimension, setDimension] = useState<DimensionType>('foreign-institutional');
   const [hoveredCommodity, setHoveredCommodity] = useState<Commodity | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Dynamic axis names
+  // Dynamic axis names - renamed all 散户 to 零售
   const axisNames = useMemo(() => {
     switch (dimension) {
       case 'foreign-institutional':
@@ -47,40 +52,40 @@ export default function InstitutionalConsistencyMap({
         };
       case 'retail-foreign':
         return {
-          x: '偏散户净持仓',
+          x: '偏零售净持仓',
           y: '偏外资净持仓',
           xKey: 'retail' as const,
           yKey: 'foreign' as const,
           thirdKey: 'institutional' as const,
-          xLabel: '偏散户净持仓金额 (亿) →',
+          xLabel: '偏零售净持仓金额 (亿) →',
           yLabel: '← 偏外资净持仓金额 (亿)',
           quadrants: {
-            tr: '偏散户做多 / 偏外资做多 (共同偏多)',
-            bl: '偏散户做空 / 偏外资做空 (共同偏空)',
-            tl: '偏散户做空 / 偏外资做多',
-            br: '偏散户做多 / 偏外资做空',
+            tr: '偏零售做多 / 偏外资做多 (共同偏多)',
+            bl: '偏零售做空 / 偏外资做空 (共同偏空)',
+            tl: '偏零售做空 / 偏外资做多',
+            br: '偏零售做多 / 偏外资做空',
           }
         };
       case 'retail-institutional':
         return {
-          x: '偏散户净持仓',
+          x: '偏零售净持仓',
           y: '偏机构净持仓',
           xKey: 'retail' as const,
           yKey: 'institutional' as const,
           thirdKey: 'foreign' as const,
-          xLabel: '偏散户净持仓金额 (亿) →',
+          xLabel: '偏零售净持仓金额 (亿) →',
           yLabel: '← 偏机构净持仓金额 (亿)',
           quadrants: {
-            tr: '偏散户做多 / 偏机构做多 (共同偏多)',
-            bl: '偏散户做空 / 偏机构做空 (共同偏空)',
-            tl: '偏散户做空 / 偏机构做多',
-            br: '偏散户做多 / 偏机构做空',
+            tr: '偏零售做多 / 偏机构做多 (共同偏多)',
+            bl: '偏零售做空 / 偏机构做空 (共同偏空)',
+            tl: '偏零售做空 / 偏机构做多',
+            br: '偏零售做多 / 偏机构做空',
           }
         };
     }
   }, [dimension]);
 
-  // Compute stats based on active dimensions
+  // Compute stats based on custom signal rules
   const stats = useMemo(() => {
     let biasedLong = 0;
     let biasedShort = 0;
@@ -88,25 +93,14 @@ export default function InstitutionalConsistencyMap({
     let maxOICommodity: Commodity | null = null;
 
     commodities.forEach(c => {
-      const f = c.positions.foreign;
-      const i = c.positions.institutional;
-      const r = c.positions.retail;
-
-      const fChg = c.changes.foreign;
-      const iChg = c.changes.institutional;
-      const rChg = c.changes.retail;
-
-      const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
-      const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
-      const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
-
-      if (isLong) {
+      const sig = getCommodityCustomSignal(c, signalConfig);
+      if (sig === 'long') {
         biasedLong++;
-      } else if (isShort) {
+      } else if (sig === 'short') {
         biasedShort++;
       }
 
-      if (isStrong) {
+      if (isOriginalStrongSignal(c)) {
         strongest++;
       }
 
@@ -121,7 +115,7 @@ export default function InstitutionalConsistencyMap({
       strongest,
       maxOI: maxOICommodity as Commodity | null
     };
-  }, [commodities]);
+  }, [commodities, signalConfig]);
 
   // Dimensions of the coordinate plane
   const width = 600;
@@ -154,61 +148,50 @@ export default function InstitutionalConsistencyMap({
     return { x, y };
   };
 
-  // Map categories of signals
-  const getSignalCategory = (c: Commodity) => {
-    const f = c.positions.foreign;
-    const i = c.positions.institutional;
-    const r = c.positions.retail;
-
-    const fChg = c.changes.foreign;
-    const iChg = c.changes.institutional;
-    const rChg = c.changes.retail;
-
-    const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
-    const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
-    const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
-
-    if (isStrong) return 'strong';
-    if (isLong) return 'long';
-    if (isShort) return 'short';
-    return 'mixed';
-  };
-
   const handleMouseMove = (e: React.MouseEvent, c: Commodity) => {
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       let x = e.clientX - rect.left + 15;
       let y = e.clientY - rect.top + 15;
 
-      // Adjust X boundary (width of tooltip is 256px)
-      if (x + 270 > rect.width) {
-        x = e.clientX - rect.left - 275; // Flip to left of mouse
+      const tooltipW = 210;
+      const tooltipH = 220;
+
+      // Ensure tooltip doesn't bleed out right
+      if (x + tooltipW > rect.width) {
+        x = e.clientX - rect.left - tooltipW - 15;
       }
-      
-      // Adjust Y boundary (height of tooltip is approx 240px)
-      if (y + 250 > rect.height) {
-        y = rect.height - 255;
+      // Ensure tooltip doesn't bleed out left
+      if (x < 10) {
+        x = 10;
       }
-      if (y < 10) y = 10;
-      if (x < 10) x = 10;
+
+      // Ensure tooltip doesn't bleed out bottom
+      if (y + tooltipH > rect.height) {
+        y = e.clientY - rect.top - tooltipH - 15;
+      }
+      // Ensure tooltip doesn't bleed out top
+      if (y < 10) {
+        y = 10;
+      }
 
       setTooltipPos({ x, y });
     }
-    setHoveredCommodity(c);
   };
 
   return (
     <div className="mb-8" id="section-consistency-map">
-      {/* Sector Sub-header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 border-b border-slate-200 pb-2">
+      {/* Segment controls */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 border-b border-slate-200 pb-2 gap-2">
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">03</span>
           <h2 className="text-lg font-sans font-bold text-slate-900 tracking-tight">一致性象限地图</h2>
-          <span className="text-xs text-slate-500 font-normal">| 呈现多维度主力资金的偏好、共识与博弈深度</span>
+          <span className="text-xs text-slate-500 font-normal">| 2D资金透视，交叉多维度主力/零售博弈极值</span>
         </div>
-        <div className="flex items-center gap-2 mt-2 md:mt-0">
-          <span className="text-xs text-slate-500 font-sans">分析维度:</span>
-          <div className="inline-flex rounded p-0.5 bg-slate-100 border border-slate-200 text-xs">
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400 font-sans">投影维度:</span>
+          <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
             <button
               onClick={() => setDimension('foreign-institutional')}
               className={`px-3 py-1 rounded transition-all cursor-pointer ${
@@ -223,7 +206,7 @@ export default function InstitutionalConsistencyMap({
                 dimension === 'retail-foreign' ? 'bg-white text-amber-900 font-bold border border-slate-200 shadow-sm' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              偏散户 - 偏外资
+              偏零售 - 偏外资
             </button>
             <button
               onClick={() => setDimension('retail-institutional')}
@@ -231,7 +214,7 @@ export default function InstitutionalConsistencyMap({
                 dimension === 'retail-institutional' ? 'bg-white text-amber-900 font-bold border border-slate-200 shadow-sm' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              偏散户 - 偏机构
+              偏零售 - 偏机构
             </button>
           </div>
         </div>
@@ -248,195 +231,147 @@ export default function InstitutionalConsistencyMap({
           <div className="flex items-center justify-between text-[11px] text-slate-500 mb-2 border-b border-slate-100 pb-2">
             <span className="flex items-center gap-1">
               <Crosshair className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-              <span>横轴：<strong className="text-slate-800">{axisNames.x}</strong> | 纵轴：<strong className="text-slate-800">{axisNames.y}</strong></span>
+              当前视图: <span className="font-bold text-slate-800 font-sans">{axisNames.x}</span> × <span className="font-bold text-slate-800 font-sans">{axisNames.y}</span> (气泡越大，资金沉淀规模越高)
             </span>
+            <div className="text-slate-400 font-mono scale-95">
+              坐标极限: X(±{limits.x.toFixed(0)}亿) | Y(±{limits.y.toFixed(0)}亿)
+            </div>
           </div>
 
-          {/* Coordinate Plot with SVG */}
-          <div className="relative flex-1 w-full flex items-center justify-center">
+          {/* SVG canvas */}
+          <div className="relative w-full aspect-[3/2] max-h-[400px] border border-slate-200 bg-slate-50/30 rounded-lg overflow-hidden">
             <svg 
               viewBox={`0 0 ${width} ${height}`} 
-              className="w-full h-full max-h-[380px] overflow-visible"
+              className="w-full h-full font-mono text-[9px] text-slate-400 select-none"
             >
-              {/* Grid Background Quadrant Labels - Standard China colors: Long represents Red, Short represents Green */}
-              <g className="text-[10px] font-sans select-none pointer-events-none">
-                {/* TR: Top Right */}
-                <text x={width - padding - 10} y={padding + 15} textAnchor="end" className="fill-red-600 font-bold">
-                  共同偏多 (双向做多) →
-                </text>
-                {/* BL: Bottom Left */}
-                <text x={padding + 10} y={height - padding - 15} textAnchor="start" className="fill-green-600 font-bold">
-                  ← 共同偏空 (双向做空)
-                </text>
-                {/* TL: Top Left */}
-                <text x={padding + 10} y={padding + 15} textAnchor="start" className="fill-slate-400">
-                  {axisNames.quadrants.tl}
-                </text>
-                {/* BR: Bottom Right */}
-                <text x={width - padding - 10} y={height - padding - 15} textAnchor="end" className="fill-slate-400">
-                  {axisNames.quadrants.br}
-                </text>
-              </g>
+              {/* Grid lines */}
+              <line x1={padding} y1={height/2} x2={width-padding} y2={height/2} stroke="#cbd5e1" strokeDasharray="3,3" />
+              <line x1={width/2} y1={padding} x2={width/2} y2={height-padding} stroke="#cbd5e1" strokeDasharray="3,3" />
 
-              {/* Zero Lines (X & Y Axes) */}
-              <line 
-                x1={padding} 
-                y1={height / 2} 
-                x2={width - padding} 
-                y2={height / 2} 
-                stroke="rgba(15, 23, 42, 0.12)" 
-                strokeWidth="1.5" 
-                strokeDasharray="4 4" 
-              />
-              <line 
-                x1={width / 2} 
-                y1={padding} 
-                x2={width / 2} 
-                y2={height - padding} 
-                stroke="rgba(15, 23, 42, 0.12)" 
-                strokeWidth="1.5" 
-                strokeDasharray="4 4" 
-              />
+              {/* Quadrant Titles (Faded background) */}
+              <text x={width - padding - 10} y={padding + 15} textAnchor="end" className="fill-slate-400 font-sans font-bold text-[9px]">{axisNames.quadrants.tr}</text>
+              <text x={padding + 10} y={padding + 15} textAnchor="start" className="fill-slate-400 font-sans font-bold text-[9px]">{axisNames.quadrants.tl}</text>
+              <text x={padding + 10} y={height - padding - 15} textAnchor="start" className="fill-slate-400 font-sans font-bold text-[9px]">{axisNames.quadrants.bl}</text>
+              <text x={width - padding - 10} y={height - padding - 15} textAnchor="end" className="fill-slate-400 font-sans font-bold text-[9px]">{axisNames.quadrants.br}</text>
 
-              {/* Central Origin Label */}
-              <circle cx={width / 2} cy={height / 2} r="3" fill="#64748b" />
+              {/* Axis labels */}
+              <text x={width - padding} y={height/2 - 8} textAnchor="end" className="fill-slate-500 font-sans font-bold">{axisNames.xLabel}</text>
+              <text x={width/2 + 8} y={padding + 10} textAnchor="start" className="fill-slate-500 font-sans font-bold transform origin-left">{axisNames.yLabel}</text>
 
-              {/* X and Y Axis physical labels */}
-              <text 
-                x={width - padding + 5} 
-                y={height / 2 + 15} 
-                textAnchor="end" 
-                className="text-[10px] font-bold fill-slate-450 font-sans"
-              >
-                {axisNames.xLabel}
-              </text>
-              <text 
-                x={width / 2 - 10} 
-                y={padding - 10} 
-                textAnchor="middle" 
-                className="text-[10px] font-bold fill-slate-450 font-sans"
-                style={{ transform: 'rotate(-90deg)', transformOrigin: `${width / 2 - 10}px ${padding - 10}px` }}
-              >
-                {axisNames.yLabel}
-              </text>
+              {/* Origin zero */}
+              <text x={width/2 + 6} y={height/2 + 12} textAnchor="start" className="fill-slate-400 text-[8px]">0.0 亿</text>
 
-              {/* Bubbles representing Commodities */}
-              <g>
-                {commodities.map((c) => {
-                  const xVal = c.positions[axisNames.xKey];
-                  const yVal = c.positions[axisNames.yKey];
-                  const { x, y } = getCoords(xVal, yVal);
-                  
-                  // Filter out if sector is selected and does not match
-                  const isFilteredOut = selectedSector && c.sector !== selectedSector;
-                  const isSelected = selectedCommodity?.id === c.id;
-                  
-                  const signalCat = getSignalCategory(c);
-                  
-                  // Size mapping: open interest from [40, 500] maps to radius [11, 25]
-                  const r = 11 + (c.openInterest / 500) * 14;
+              {/* Plot Bubbles */}
+              {commodities.map((c) => {
+                const xVal = c.positions[axisNames.xKey];
+                const yVal = c.positions[axisNames.yKey];
+                const { x, y } = getCoords(xVal, yVal);
 
-                  // Define color style based on signal (Compliance Yellow and Mainland Red/Green standards)
-                  let fill = 'rgba(148, 163, 184, 0.15)'; // Neutral Default
-                  let stroke = '#64748b';
-                  let strokeWidth = '1';
+                // Check active state
+                const isSelected = compareMode === 'multi' && selectedCommodity?.id === c.id;
+                const isHovered = hoveredCommodity?.id === c.id;
+                
+                // Bubble radius based on log of openInterest
+                const radius = Math.max(Math.sqrt(c.openInterest) * 1.5, 4);
 
-                  if (signalCat === 'strong') {
-                    // Extreme consistency: Selected dimensions long, third is short -> Yellow
-                    fill = 'rgba(245, 158, 11, 0.2)'; 
-                    stroke = '#d97706'; 
-                    strokeWidth = '2.5';
-                  } else if (signalCat === 'long') {
-                    // Joint Long -> China Red
-                    fill = 'rgba(239, 68, 68, 0.12)'; 
-                    stroke = '#dc2626';
-                    strokeWidth = '2';
-                  } else if (signalCat === 'short') {
-                    // Joint Short -> China Green
-                    fill = 'rgba(16, 185, 129, 0.15)'; 
-                    stroke = '#16a34a';
-                    strokeWidth = '2';
-                  } else {
-                    // Mixed
-                    fill = 'rgba(148, 163, 184, 0.08)';
-                    stroke = '#94a3b8';
-                    strokeWidth = '1';
-                  }
+                // Custom Signal evaluation
+                const customSig = getCommodityCustomSignal(c, signalConfig);
+                const isStrong = isOriginalStrongSignal(c);
 
-                  if (isSelected) {
-                    stroke = '#0f172a';
-                    strokeWidth = '3.5';
-                  }
+                // Color mapping: Red for long custom signal, Green for short custom signal, slate otherwise
+                let bubbleColor = 'rgba(148, 163, 184, 0.45)'; // Slate 400
+                let strokeColor = 'rgba(100, 116, 139, 0.6)';
+                
+                if (customSig === 'long') {
+                  bubbleColor = 'rgba(239, 68, 68, 0.45)'; // Red 500
+                  strokeColor = 'rgba(220, 38, 38, 0.8)';
+                } else if (customSig === 'short') {
+                  bubbleColor = 'rgba(34, 197, 94, 0.45)'; // Green 500
+                  strokeColor = 'rgba(22, 163, 74, 0.8)';
+                }
 
-                  return (
-                    <g 
-                      key={c.id}
-                      className={`cursor-pointer transition-opacity duration-300 ${isFilteredOut ? 'opacity-10' : 'opacity-100'}`}
-                      onClick={() => onSelectCommodity(c)}
-                      onMouseMove={(e) => handleMouseMove(e, c)}
-                      onMouseLeave={() => setHoveredCommodity(null)}
-                    >
-                      {/* Highlight Outer Pulse Ring for Extreme consistency Signals */}
-                      {signalCat === 'strong' && (
-                        <circle 
-                           cx={x} 
-                           cy={y} 
-                           r={r + 5} 
-                           fill="none" 
-                           stroke="#d97706" 
-                           strokeWidth="1" 
-                           className="animate-ping opacity-40" 
-                           style={{ animationDuration: '3.5s' }}
-                        />
-                      )}
+                if (isStrong) {
+                  strokeColor = 'rgba(217, 119, 6, 0.9)'; // Amber stroke for Strong 합力
+                }
 
-                      {/* Commodity Bubble */}
-                      <circle
-                        cx={x}
-                        cy={y}
-                        r={r}
-                        fill={fill}
-                        stroke={stroke}
-                        strokeWidth={strokeWidth}
-                        className="transition-all duration-300 hover:scale-110"
+                return (
+                  <g 
+                    key={c.id}
+                    className="cursor-pointer transition-all duration-300"
+                    onClick={() => onSelectCommodity(c)}
+                    onMouseEnter={(e) => {
+                      setHoveredCommodity(c);
+                      handleMouseMove(e, c);
+                    }}
+                    onMouseMove={(e) => handleMouseMove(e, c)}
+                    onMouseLeave={() => setHoveredCommodity(null)}
+                  >
+                    {/* Ring selection pulse */}
+                    {(isSelected || isHovered) && (
+                      <circle 
+                        cx={x} 
+                        cy={y} 
+                        r={radius + 6} 
+                        fill="none" 
+                        stroke={isStrong ? "#d97706" : customSig === 'long' ? "#ef4444" : customSig === 'short' ? "#22c55e" : "#475569"} 
+                        strokeWidth="1.5"
+                        strokeDasharray={isHovered ? "none" : "3,3"}
+                        className={isHovered ? "" : "animate-spin"}
+                        style={{ transformOrigin: `${x}px ${y}px`, animationDuration: '6s' }}
                       />
+                    )}
 
-                      {/* Commodity Symbol Text */}
-                      <text
-                        x={x}
-                        y={y + 3.5}
-                        textAnchor="middle"
-                        className={`text-[9px] font-mono font-bold select-none pointer-events-none ${
-                          isSelected ? 'fill-slate-900' : 'fill-slate-700'
-                        }`}
-                      >
-                        {c.name}
-                      </text>
-                    </g>
-                  );
-                })}
-              </g>
+                    {/* Bubble itself */}
+                    <circle 
+                      cx={x} 
+                      cy={y} 
+                      r={radius} 
+                      fill={bubbleColor}
+                      stroke={strokeColor}
+                      strokeWidth={isSelected ? "2.5" : "1.2"}
+                      className="transition-all duration-200"
+                    />
+
+                    {/* Short text name inside/above the bubble */}
+                    <text 
+                      x={x} 
+                      y={y - radius - 3} 
+                      textAnchor="middle" 
+                      className={`font-sans font-bold text-[8.5px] select-none ${
+                        isSelected 
+                          ? 'fill-amber-800 font-extrabold text-[9.5px]' 
+                          : isStrong 
+                            ? 'fill-amber-700' 
+                            : customSig === 'long' 
+                              ? 'fill-red-800' 
+                              : customSig === 'short' 
+                                ? 'fill-green-800' 
+                                : 'fill-slate-600'
+                      }`}
+                    >
+                      {c.name}
+                    </text>
+                  </g>
+                );
+              })}
             </svg>
+
           </div>
 
-          {/* Interactive Tooltip Container with Expanded Definitions */}
+          {/* Hover Tooltip Overlay in SVG */}
           <AnimatePresence>
             {hoveredCommodity && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-                style={{ 
-                  position: 'absolute', 
-                  left: `${tooltipPos.x}px`, 
-                  top: `${tooltipPos.y}px`,
-                  zIndex: 100
-                }}
-                className="bg-slate-900 text-slate-100 p-3.5 rounded-lg shadow-2xl text-[11px] font-sans w-64 pointer-events-none leading-relaxed border border-slate-700 backdrop-blur-md"
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.12 }}
+                className="absolute bg-slate-900/95 border border-slate-700 text-white rounded p-3 shadow-xl pointer-events-none z-50 w-[200px]"
+                style={{ left: tooltipPos.x, top: tooltipPos.y }}
               >
-                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-2">
-                  <span className="font-bold text-amber-400">{hoveredCommodity.name}</span>
-                  <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+                <div className="font-sans font-black border-b border-slate-700 pb-1 mb-1.5 flex justify-between items-center">
+                  <span className="text-[12px] text-amber-400">{hoveredCommodity.name}</span>
+                  <span className="text-[9px] text-slate-400 font-mono bg-slate-800 px-1 py-0.2 rounded">
                     {hoveredCommodity.sector}
                   </span>
                 </div>
@@ -462,7 +397,7 @@ export default function InstitutionalConsistencyMap({
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-slate-400">偏散户净额:</span>
+                      <span className="text-slate-400">偏零售净额:</span>
                       <span className={`font-mono font-bold ${hoveredCommodity.positions.retail >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                         {hoveredCommodity.positions.retail > 0 ? '+' : ''}{hoveredCommodity.positions.retail.toFixed(1)} 亿
                       </span>
@@ -473,103 +408,125 @@ export default function InstitutionalConsistencyMap({
                   <div className="mt-2.5 pt-2 border-t border-slate-800 text-[10px] space-y-1">
                     <div className="text-slate-400 font-bold">气泡属性及定义:</div>
                     <div className="text-slate-300">
-                      • <span className="text-amber-400 font-medium">气泡大小</span>: 代表该品种全市场资金沉淀规模 (以亿元为单位)。
+                      • <span className="text-amber-400 font-medium">气泡大小</span>: 代表该品种资金沉淀规模。
                     </div>
                     <div className="text-slate-300">
                       • <span className="text-amber-400 font-medium">当前信号</span>: 
-                      {getSignalCategory(hoveredCommodity) === 'strong' && " 加强 (外资/机构一致同向，散户反向)"}
-                      {getSignalCategory(hoveredCommodity) === 'long' && " 偏多 (外资/机构流量和存量均增长)"}
-                      {getSignalCategory(hoveredCommodity) === 'short' && " 偏空 (外资/机构流量和存量均减少)"}
-                      {getSignalCategory(hoveredCommodity) === 'mixed' && " 席位分歧 (资金博弈无共识)"}
+                      {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'long' && " 偏多 (自定义)"}
+                      {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'short' && " 偏空 (自定义)"}
+                      {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'none' && " 无"}
+                      {isOriginalStrongSignal(hoveredCommodity) && " (重点关注)"}
                     </div>
                   </div>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Bottom helper info */}
+          <div className="text-[10px] text-slate-400 mt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-t border-slate-100 pt-2 font-sans">
+            <span>💡 提示：点击品种气泡可直接联动底部的 04、05 精准图表。</span>
+            <span>免责声明：默认席位组合仅供量化规律示意，不构成买卖观点。</span>
+          </div>
         </div>
 
         {/* Dynamic Summary Cards on the Right */}
         <div className="flex flex-col gap-4">
           {/* Dimension Rules & Signal Stats Card */}
-          <div className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col justify-between flex-1">
+          <div className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col justify-between flex-1 shadow-2xs">
             <div>
-              <div className="flex items-center gap-1.5 border-b border-slate-200 pb-2 mb-3">
+              <div className="flex items-center gap-1.5 border-b border-slate-100 pb-2.5 mb-3.5">
                 <Activity className="w-4 h-4 text-amber-600 animate-pulse" />
-                <span className="font-sans font-bold text-slate-800 text-sm">全景一致度分析</span>
+                <span className="font-sans font-extrabold text-slate-800 text-sm">全景一致度多维度分析</span>
               </div>
 
-              {/* Signals Count Meters - China Mainland Colors (Red=Long, Green=Short) */}
+              {/* Stacked Market Breadth Bar & Grid */}
               <div className="space-y-4">
-                {/* Long */}
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-500 flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span>
-                      偏多信号数 (一致偏多)
-                    </span>
-                    <span className="font-mono font-bold text-slate-800">{stats.biasedLong} 个</span>
+                {/* 1. Market Breadth stacked bar */}
+                {(() => {
+                  const totalCount = commodities.length || 1;
+                  const longPct = (stats.biasedLong / totalCount) * 100;
+                  const shortPct = (stats.biasedShort / totalCount) * 100;
+                  const neutralPct = Math.max(0, 100 - longPct - shortPct);
+                  return (
+                    <div className="space-y-2 bg-slate-50/50 border border-slate-100 p-2.5 rounded-xl">
+                      <div className="flex justify-between items-center text-[10px] text-slate-400 font-sans">
+                        <span className="font-bold text-slate-500">博弈多空信号覆盖率</span>
+                        <span className="font-mono font-medium">样本共 {totalCount} 品种</span>
+                      </div>
+                      <div className="w-full h-2.5 rounded-full flex overflow-hidden bg-slate-200/60 border border-slate-200/20 shadow-3xs">
+                        {stats.biasedLong > 0 && (
+                          <div 
+                            className="bg-red-500 h-full transition-all duration-500 hover:opacity-90" 
+                            style={{ width: `${longPct}%` }}
+                            title={`偏多信号: ${stats.biasedLong}个 (${longPct.toFixed(1)}%)`}
+                          />
+                        )}
+                        {stats.biasedShort > 0 && (
+                          <div 
+                            className="bg-green-500 h-full transition-all duration-500 hover:opacity-90" 
+                            style={{ width: `${shortPct}%` }}
+                            title={`偏空信号: ${stats.biasedShort}个 (${shortPct.toFixed(1)}%)`}
+                          />
+                        )}
+                        {neutralPct > 0 && (
+                          <div 
+                            className="bg-slate-300 h-full transition-all duration-500 hover:opacity-90" 
+                            style={{ width: `${neutralPct}%` }}
+                            title={`其它品种: ${totalCount - stats.biasedLong - stats.biasedShort}个 (${neutralPct.toFixed(1)}%)`}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* 2. Numeric Grid */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="p-3 bg-red-50/50 rounded-xl border border-red-100/60 text-center shadow-3xs">
+                    <div className="text-[10px] text-red-600 font-extrabold flex items-center justify-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span>
+                      自定义偏多
+                    </div>
+                    <div className="font-mono font-black text-red-950 text-base mt-1">
+                      {stats.biasedLong} <span className="text-[10px] font-normal text-red-700">个</span>
+                    </div>
                   </div>
-                  <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                    <div 
-                     className="bg-red-500 h-full transition-all duration-500" 
-                      style={{ width: `${(stats.biasedLong / commodities.length) * 100}%` }}
-                    />
+
+                  <div className="p-3 bg-green-50/50 rounded-xl border border-green-100/60 text-center shadow-3xs">
+                    <div className="text-[10px] text-green-600 font-extrabold flex items-center justify-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
+                      自定义偏空
+                    </div>
+                    <div className="font-mono font-black text-green-950 text-base mt-1">
+                      {stats.biasedShort} <span className="text-[10px] font-normal text-green-700">个</span>
+                    </div>
                   </div>
-                  <span className="text-[9px] text-slate-400 block mt-0.5">
-                    外资与机构流量和存量均增长，反映主力看涨
-                  </span>
                 </div>
 
-                {/* Short */}
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-500 flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
-                      偏空信号数 (一致偏空)
-                    </span>
-                    <span className="font-mono font-bold text-slate-800">{stats.biasedShort} 个</span>
+                {/* 3. 重点关注信号 (Compliant without description) */}
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/80 shadow-3xs flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block animate-pulse"></span>
+                    <span className="text-amber-950 font-extrabold text-xs">重点关注多空品种数</span>
                   </div>
-                  <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                    <div 
-                      className="bg-green-500 h-full transition-all duration-500" 
-                      style={{ width: `${(stats.biasedShort / commodities.length) * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-[9px] text-slate-400 block mt-0.5">
-                    外资与机构流量和存量均减少，反映主力看跌
+                  <span className="font-mono font-black text-amber-950 text-sm">
+                    {stats.strongest} <span className="text-[10px] font-normal text-amber-700">个</span>
                   </span>
-                </div>
-
-                {/* Extreme Consistency */}
-                <div className="p-2.5 bg-amber-50 rounded border border-amber-200">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-amber-800 font-bold flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-amber-500 inline-block animate-ping"></span>
-                      加强信号数 
-                    </span>
-                    <span className="font-mono font-bold text-amber-800">{stats.strongest} 个</span>
-                  </div>
-                  <div className="w-full bg-amber-200 h-1.5 rounded-full overflow-hidden">
-                    <div 
-                      className="bg-amber-600 h-full transition-all duration-500" 
-                      style={{ width: `${(stats.strongest / commodities.length) * 100}%` }}
-                    />
-                  </div>
                 </div>
               </div>
             </div>
 
             {/* Max OI (Sediment) Commodity details */}
-            <div className="mt-4 pt-3 border-t border-slate-200">
-              <div className="text-[10px] text-slate-400 mb-1">当前样本最大资金沉淀品种:</div>
+            <div className="mt-4 pt-3.5 border-t border-slate-100">
+              <div className="text-[10px] text-slate-400 mb-1.5 font-sans">当前样本最高资金沉淀品种:</div>
               {stats.maxOI && (
                 <div 
-                  className="flex items-center justify-between cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-all border border-transparent hover:border-slate-200"
+                  className="flex items-center justify-between cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-all border border-slate-100 hover:border-slate-200 shadow-3xs"
                   onClick={() => onSelectCommodity(stats.maxOI!)}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold bg-slate-100 text-amber-800 px-2 py-0.5 rounded border border-slate-200 text-xs">
+                    <span className="font-mono font-bold bg-slate-100 text-amber-800 px-2 py-0.5 rounded border border-slate-200 text-[10px]">
                       {stats.maxOI.id}
                     </span>
                     <span className="text-xs text-slate-700 font-bold">{stats.maxOI.name}</span>

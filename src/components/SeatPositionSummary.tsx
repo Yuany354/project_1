@@ -3,43 +3,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { Globe, Building2, Users, AlertTriangle, ShieldCheck, Info, HelpCircle, Sliders } from 'lucide-react';
+import React from 'react';
+import { Globe, Building2, Users, AlertTriangle, ShieldCheck, HelpCircle } from 'lucide-react';
 import { Commodity } from '../types';
-import { getCommodityEvaluation } from './EvaluationBadge';
+import { getCommodityCustomSignal, isOriginalStrongSignal, SignalType, SignalConfig } from '../utils/signal';
 
 interface SeatPositionSummaryProps {
   commodities: Commodity[];
-  onSignalFilter: (filterType: 'all' | 'long' | 'short' | 'strong' | null) => void;
-  activeFilter: 'all' | 'long' | 'short' | 'strong' | null;
+  onSignalFilter: (filterType: 'all' | 'long' | 'short' | null) => void;
+  activeFilter: 'all' | 'long' | 'short' | null;
   onNavigateToFilter?: (seatType: 'foreign' | 'institutional' | 'retail') => void;
+  signalConfig: SignalConfig;
 }
 
 export default function SeatPositionSummary({
   commodities,
   onSignalFilter,
   activeFilter,
-  onNavigateToFilter
+  onNavigateToFilter,
+  signalConfig
 }: SeatPositionSummaryProps) {
-  // Filter commodities based on activeFilter for summary cards
+  // Filter commodities based on custom signal configuration
   const filteredCommoditiesForSummary = activeFilter
     ? commodities.filter(c => {
-        const f = c.positions.foreign;
-        const i = c.positions.institutional;
-        const r = c.positions.retail;
-
-        const fChg = c.changes.foreign;
-        const iChg = c.changes.institutional;
-        const rChg = c.changes.retail;
-
-        const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
-        const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
-        const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
-
-        if (activeFilter === 'strong') return isStrong;
-        if (activeFilter === 'long') return isLong;
-        if (activeFilter === 'short') return isShort;
-        if (activeFilter === 'all') return isLong || isShort;
+        const sig = getCommodityCustomSignal(c, signalConfig);
+        if (activeFilter === 'long') return sig === 'long';
+        if (activeFilter === 'short') return sig === 'short';
+        if (activeFilter === 'all') return sig === 'long' || sig === 'short';
         return true;
       })
     : commodities;
@@ -53,39 +43,28 @@ export default function SeatPositionSummary({
   const changeInstitutional = filteredCommoditiesForSummary.reduce((acc, curr) => acc + curr.changes.institutional, 0);
   const changeRetail = filteredCommoditiesForSummary.reduce((acc, curr) => acc + curr.changes.retail, 0);
 
-  // Compute signal counts based on default (Foreign & Institutional vs Retail) over ALL commodities (for general indicators card 4)
-  let biasedLongCount = 0;
-  let biasedShortCount = 0;
-  let strongestCount = 0;
+  // Compute custom signal counts over ALL commodities
+  let customLongCount = 0;
+  let customShortCount = 0;
+  let originalStrongCount = 0;
   let signalOpenInterestSum = 0;
 
   commodities.forEach(c => {
-    const f = c.positions.foreign;
-    const i = c.positions.institutional;
-    const r = c.positions.retail;
-
-    const fChg = c.changes.foreign;
-    const iChg = c.changes.institutional;
-    const rChg = c.changes.retail;
-
-    const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
-    const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
-    const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
-
-    if (isLong) {
-      biasedLongCount++;
+    const sig = getCommodityCustomSignal(c, signalConfig);
+    if (sig === 'long') {
+      customLongCount++;
       signalOpenInterestSum += c.openInterest;
-    } else if (isShort) {
-      biasedShortCount++;
+    } else if (sig === 'short') {
+      customShortCount++;
       signalOpenInterestSum += c.openInterest;
     }
-
-    if (isStrong) {
-      strongestCount++;
+    
+    if (isOriginalStrongSignal(c)) {
+      originalStrongCount++;
     }
   });
 
-  const totalDivergenceSignals = biasedLongCount + biasedShortCount;
+  const totalCustomSignals = customLongCount + customShortCount;
 
   // Format currency/funds (China standard: Positive is +, Negative is -)
   const formatFund = (num: number) => {
@@ -101,10 +80,10 @@ export default function SeatPositionSummary({
           <h2 className="text-lg font-sans font-bold text-slate-900 tracking-tight">三类席位仓位摘要</h2>
           {activeFilter ? (
             <span className="text-[10px] font-sans font-bold bg-amber-500 text-white px-2 py-0.5 rounded shadow-xs animate-pulse">
-              当前口径: {activeFilter === 'strong' ? '加强' : activeFilter === 'long' ? '偏多' : activeFilter === 'short' ? '偏空' : '全部'} 信号 ({filteredCommoditiesForSummary.length}个品种)
+              当前口径: {activeFilter === 'long' ? '自定义偏多' : activeFilter === 'short' ? '自定义偏空' : '全部自定义'} 信号 ({filteredCommoditiesForSummary.length}个品种)
             </span>
           ) : (
-            <span className="text-xs text-slate-500 font-normal">| 透视外资、机构及散户的资金流向与持仓结构</span>
+            <span className="text-xs text-slate-500 font-normal">| 透视外资、机构及零售的资金流向与持仓结构</span>
           )}
         </div>
         <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-1 md:mt-0">
@@ -124,7 +103,7 @@ export default function SeatPositionSummary({
           <div className="absolute left-0 right-0 bottom-full mb-2 hidden group-hover:block z-50 bg-slate-900 text-slate-100 p-3 rounded shadow-xl text-[11px] leading-relaxed max-w-xs mx-auto border border-slate-700">
             <div className="font-bold text-amber-400 mb-1">外资席位结算口径：</div>
             <p className="text-slate-300 mb-1.5">逐合约净持仓或净变动 × 当日结算价 × 合约乘数，再按品种汇总。反映主流外资代理席位的资金暴露。</p>
-            <span className="text-slate-400 font-mono">正值表示净多，负值表示净空。</span>
+            <span className="text-slate-400 font-mono">正值表示净多，负值表示净空。以用户实际选择为准，默认配置仅供示意，不代表公司观点。</span>
           </div>
 
           <div className="flex items-center justify-between text-slate-500 mb-1.5">
@@ -148,13 +127,12 @@ export default function SeatPositionSummary({
                   <Globe className="w-4 h-4 text-amber-500" />
                 </button>
                 <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover/cfg:block bg-slate-950 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap z-50 font-sans pointer-events-none">
-                  配置外资席位
+                  配置外资席位 (以用户实际选择为准)
                 </div>
               </div>
             </div>
           </div>
           <div className="mt-2">
-            {/* China Standard Color: >=0 is Red, <0 is Green */}
             <span className={`text-2xl font-mono font-bold tracking-tight ${totalForeign >= 0 ? 'text-red-600' : 'text-green-600'}`}>
               {formatFund(totalForeign)}
             </span>
@@ -176,7 +154,7 @@ export default function SeatPositionSummary({
           <div className="absolute left-0 right-0 bottom-full mb-2 hidden group-hover:block z-50 bg-slate-900 text-slate-100 p-3 rounded shadow-xl text-[11px] leading-relaxed max-w-xs mx-auto border border-slate-700">
             <div className="font-bold text-red-400 mb-1">机构席位结算口径：</div>
             <p className="text-slate-300 mb-1.5">汇总行业核心机构主力席位。逐合约净持仓或净变动 × 当日结算价 × 合约乘数，再按品种汇总。</p>
-            <span className="text-slate-400 font-mono">正值(红)表示净多，负值(绿)表示净空。</span>
+            <span className="text-slate-400 font-mono">正值(红)表示净多，负值(绿)表示净空。以用户实际选择为准，默认配置仅供示意，不代表公司观点。</span>
           </div>
 
           <div className="flex items-center justify-between text-slate-500 mb-1.5">
@@ -200,7 +178,7 @@ export default function SeatPositionSummary({
                   <Building2 className="w-4 h-4 text-red-500" />
                 </button>
                 <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover/cfg:block bg-slate-950 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap z-50 font-sans pointer-events-none">
-                  配置机构席位
+                  配置机构席位 (以用户实际选择为准)
                 </div>
               </div>
             </div>
@@ -218,31 +196,31 @@ export default function SeatPositionSummary({
           </div>
         </div>
 
-        {/* Retail Card */}
+        {/* Retail Card (Renamed to 偏零售席位) */}
         <div 
           id="summary-card-retail"
           className="group relative bg-white rounded-lg p-4 border border-slate-200 border-l-4 border-l-slate-400 shadow-sm hover:shadow-md transition-all duration-200"
         >
           {/* Hover calculation tooltip popover */}
           <div className="absolute left-0 right-0 bottom-full mb-2 hidden group-hover:block z-50 bg-slate-900 text-slate-100 p-3 rounded shadow-xl text-[11px] leading-relaxed max-w-xs mx-auto border border-slate-700">
-            <div className="font-bold text-slate-400 mb-1">散户席位结算口径：</div>
-            <p className="text-slate-300 mb-1.5">代表偏散户大单及零售持仓分布汇总。采用逐合约净持仓 × 结算价进行拟合估算。</p>
-            <span className="text-slate-400 font-mono">正值表示净多，负值表示净空。</span>
+            <div className="font-bold text-slate-400 mb-1">零售席位结算口径：</div>
+            <p className="text-slate-300 mb-1.5">代表偏零售大单及活跃零售持仓分布汇总。采用逐合约净持仓 × 结算价进行拟合估算。</p>
+            <span className="text-slate-400 font-mono">正值表示净多，负值表示净空。以用户实际选择为准，默认配置仅供示意，不代表公司观点。</span>
           </div>
 
           <div className="flex items-center justify-between text-slate-500 mb-1.5">
             <div>
               <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                偏散户席位
+                偏零售席位
                 <HelpCircle className="w-3 h-3 text-slate-400 cursor-pointer" />
               </span>
-              <span className="text-[10px] text-slate-400 block font-mono">RETAIL SIGNALS (偏散户大单/零售席位)</span>
+              <span className="text-[10px] text-slate-400 block font-mono">RETAIL SIGNALS (偏零售交易席位)</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative group/cfg">
                 <button 
                   className="p-1 hover:bg-slate-100 rounded transition-colors cursor-pointer"
-                  title="筛选散户席位"
+                  title="筛选零售席位"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (onNavigateToFilter) onNavigateToFilter('retail');
@@ -251,7 +229,7 @@ export default function SeatPositionSummary({
                   <Users className="w-4 h-4 text-slate-500" />
                 </button>
                 <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover/cfg:block bg-slate-950 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap z-50 font-sans pointer-events-none">
-                  配置散户席位
+                  配置零售席位 (以用户实际选择为准)
                 </div>
               </div>
             </div>
@@ -277,7 +255,7 @@ export default function SeatPositionSummary({
           {/* Hover calculation tooltip popover */}
           <div className="absolute left-0 right-0 bottom-full mb-2 hidden group-hover:block z-50 bg-slate-900 text-slate-100 p-3 rounded shadow-xl text-[11px] leading-relaxed max-w-xs mx-auto border border-slate-700">
             <div className="font-bold text-amber-400 mb-1">全市沉淀资金口径 (Daily Money Flow)：</div>
-            <p className="text-slate-300 mb-1.5">官方持仓量 × 2 × 加权收盘价 × 合约乘数 × 保证金率。低于 10 亿元的品种不进入信号清单。反映多维度主力资金在板块品种中的持仓共识与对立程度。</p>
+            <p className="text-slate-300 mb-1.5">官方持仓量 × 2 × 加权收盘价 × 合约乘数 × 保证金率。低于 10 亿元的品种不进入信号清单。反映多维度主力资金在板块品种中的持仓共识与对立程度。默认配置仅供示意，不代表公司观点。</p>
           </div>
 
           <div className="flex items-start justify-between">
@@ -295,7 +273,7 @@ export default function SeatPositionSummary({
 
           <div className="mt-2 flex items-baseline justify-between gap-2">
             <span className="text-2xl font-mono font-bold text-amber-600">
-              {totalDivergenceSignals} <span className="text-xs font-sans font-normal text-slate-500">个</span>
+              {totalCustomSignals} <span className="text-xs font-sans font-normal text-slate-500">个</span>
             </span>
             <button 
               onClick={() => onSignalFilter(activeFilter === 'all' ? null : 'all')}
@@ -307,27 +285,20 @@ export default function SeatPositionSummary({
             </button>
           </div>
 
-          {/* Yellow mapping for signals: Extreme Consistency is Yellow, Long is Red, Short is Green */}
+          {/* Mapping for signals: Long is Red, Short is Green */}
           <div className="mt-2.5 pt-2 border-t border-slate-200 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-600 font-sans">
             <button 
               onClick={() => onSignalFilter(activeFilter === 'long' ? null : 'long')}
               className={`px-1.5 py-0.5 rounded hover:bg-slate-100 transition-colors cursor-pointer whitespace-nowrap ${activeFilter === 'long' ? 'bg-red-50 text-red-600 font-bold border border-red-200' : ''}`}
             >
-              偏多 <span className="font-mono font-bold text-red-600">{biasedLongCount}</span>
+              偏多 <span className="font-mono font-bold text-red-600">{customLongCount}</span>
             </button>
             <span className="text-slate-300">·</span>
             <button 
               onClick={() => onSignalFilter(activeFilter === 'short' ? null : 'short')}
               className={`px-1.5 py-0.5 rounded hover:bg-slate-100 transition-colors cursor-pointer whitespace-nowrap ${activeFilter === 'short' ? 'bg-green-50 text-green-600 font-bold border border-green-200' : ''}`}
             >
-              偏空 <span className="font-mono font-bold text-green-600">{biasedShortCount}</span>
-            </button>
-            <span className="text-slate-300">·</span>
-            <button 
-              onClick={() => onSignalFilter(activeFilter === 'strong' ? null : 'strong')}
-              className={`px-1.5 py-0.5 rounded hover:bg-slate-100 transition-colors cursor-pointer whitespace-nowrap ${activeFilter === 'strong' ? 'bg-amber-50 text-amber-700 font-bold border border-amber-200' : ''}`}
-            >
-              加强 <span className="font-mono font-bold text-amber-600">{strongestCount}</span>
+              偏空 <span className="font-mono font-bold text-green-600">{customShortCount}</span>
             </button>
           </div>
           

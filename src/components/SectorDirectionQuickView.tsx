@@ -6,6 +6,7 @@
 import React from 'react';
 import { Commodity } from '../types';
 import { SECTORS, getSectorRepSymbols } from '../data';
+import { getCommodityCustomSignal, isOriginalStrongSignal, SignalType, SignalConfig } from '../utils/signal';
 
 interface SectorDirectionQuickViewProps {
   commodities: Commodity[];
@@ -13,6 +14,7 @@ interface SectorDirectionQuickViewProps {
   onSelectSector: (sector: string | null) => void;
   onSelectCommodity: (commodity: Commodity) => void;
   selectedCommodityId: string | null;
+  signalConfig: SignalConfig;
 }
 
 export default function SectorDirectionQuickView({
@@ -20,7 +22,8 @@ export default function SectorDirectionQuickView({
   selectedSector,
   onSelectSector,
   onSelectCommodity,
-  selectedCommodityId
+  selectedCommodityId,
+  signalConfig
 }: SectorDirectionQuickViewProps) {
   
   // Calculate stats for each sector
@@ -42,22 +45,13 @@ export default function SectorDirectionQuickView({
       sumInstitutional += c.positions.institutional;
       sumRetail += c.positions.retail;
 
-      const f = c.positions.foreign;
-      const i = c.positions.institutional;
-      const r = c.positions.retail;
-
-      const fChg = c.changes.foreign;
-      const iChg = c.changes.institutional;
-      const rChg = c.changes.retail;
-
-      const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
-      const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
-      const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
-
-      const hasSignal = isLong || isShort;
-
-      if (hasSignal) signalCount++;
-      if (isStrong) strongestCount++;
+      const sig = getCommodityCustomSignal(c, signalConfig);
+      if (sig !== 'none') {
+        signalCount++;
+      }
+      if (isOriginalStrongSignal(c)) {
+        strongestCount++;
+      }
     });
 
     return {
@@ -97,41 +91,35 @@ export default function SectorDirectionQuickView({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {sectorData.map((sec, idx) => {
-          if (sec.commodities.length === 0) return null;
+        {sectorData.map(sec => {
           const isSelected = selectedSector === sec.name;
-          const isAnySelected = selectedSector !== null;
-          
           return (
             <div
               key={sec.name}
-              id={`sector-card-${idx}`}
               onClick={() => onSelectSector(isSelected ? null : sec.name)}
-              className={`cursor-pointer rounded-lg p-4 border transition-all duration-200 select-none ${
+              className={`p-4 rounded-xl border transition-all cursor-pointer select-none ${
                 isSelected 
-                  ? 'border-amber-500 bg-amber-50/20 shadow-md ring-1 ring-amber-400/30' 
-                  : isAnySelected 
-                    ? 'border-slate-200 bg-white opacity-35 hover:opacity-75' 
-                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                  ? 'bg-blue-50/50 border-blue-400 shadow-sm' 
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-2xs'
               }`}
             >
               {/* Header */}
-              <div className="flex items-start justify-between mb-3">
-                <span className="font-sans font-bold text-slate-800 text-sm">{sec.name}</span>
-                <div className="flex items-center gap-1 text-[10px]">
-                  <span className="bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
-                    {sec.signalCount}持仓信号
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <h3 className="font-sans font-black text-slate-900 text-sm">{sec.name}</h3>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    资金规模 {sec.totalOpenInterest.toFixed(1)} 亿
                   </span>
-                  {sec.strongestCount > 0 && (
-                    <span className="bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-mono font-bold animate-pulse">
-                      {sec.strongestCount}加强
-                    </span>
-                  )}
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-mono">
+                    信号: {sec.signalCount} 个
+                  </span>
                 </div>
               </div>
 
-              {/* Positions Sums (China standards: >=0 Red, <0 Green) */}
-              <div className="grid grid-cols-3 gap-2 py-2 border-y border-slate-100 my-2 text-[11px]">
+              {/* Grid of details */}
+              <div className="grid grid-cols-3 gap-1 border-t border-b border-slate-100 py-2 text-[10px] text-slate-500 font-sans">
                 {/* Foreign */}
                 <div>
                   <span className="text-slate-400 block mb-0.5 scale-90 origin-left">外资净额</span>
@@ -148,7 +136,7 @@ export default function SectorDirectionQuickView({
                 </div>
                 {/* Retail */}
                 <div>
-                  <span className="text-slate-400 block mb-0.5 scale-90 origin-left">散户净额</span>
+                  <span className="text-slate-400 block mb-0.5 scale-90 origin-left">零售净额</span>
                   <span className={`font-mono font-bold ${sec.sumRetail >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                     {formatFund(sec.sumRetail)}亿
                   </span>
@@ -166,12 +154,7 @@ export default function SectorDirectionQuickView({
                     const f = c.positions.foreign;
                     const i = c.positions.institutional;
                     const r = c.positions.retail;
-                    const fChg = c.changes.foreign;
-                    const iChg = c.changes.institutional;
-                    const rChg = c.changes.retail;
-                    const isLong = f > 0 && i > 0 && fChg > 0 && iChg > 0;
-                    const isShort = f < 0 && i < 0 && fChg < 0 && iChg < 0;
-                    const isStrong = (isLong && (r < 0 || rChg < 0)) || (isShort && (r > 0 || rChg > 0));
+                    const isStrong = isOriginalStrongSignal(c);
                     
                     return (
                       <span
@@ -187,7 +170,7 @@ export default function SectorDirectionQuickView({
                               ? 'bg-amber-50 text-amber-800 font-bold border-amber-200 hover:bg-amber-100'
                               : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'
                         }`}
-                        title={`${c.name}: 外资 ${f > 0 ? '+' : ''}${f}亿 | 机构 ${i > 0 ? '+' : ''}${i}亿 | 散户 ${r > 0 ? '+' : ''}${r}亿`}
+                        title={`${c.name}: 外资 ${f > 0 ? '+' : ''}${f}亿 | 机构 ${i > 0 ? '+' : ''}${i}亿 | 零售 ${r > 0 ? '+' : ''}${r}亿`}
                       >
                         {c.name}
                       </span>
