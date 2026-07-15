@@ -151,15 +151,18 @@ export default function InstitutionalConsistencyMap({
   const handleMouseMove = (e: React.MouseEvent, c: Commodity) => {
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
-      let x = e.clientX - rect.left + 15;
-      let y = e.clientY - rect.top + 15;
+      const tooltipW = 230;
+      const tooltipH = 150;
 
-      const tooltipW = 210;
-      const tooltipH = 220;
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      let x = mouseX + 15;
+      let y = mouseY + 15;
 
       // Ensure tooltip doesn't bleed out right
       if (x + tooltipW > rect.width) {
-        x = e.clientX - rect.left - tooltipW - 15;
+        x = mouseX - tooltipW - 15;
       }
       // Ensure tooltip doesn't bleed out left
       if (x < 10) {
@@ -168,7 +171,7 @@ export default function InstitutionalConsistencyMap({
 
       // Ensure tooltip doesn't bleed out bottom
       if (y + tooltipH > rect.height) {
-        y = e.clientY - rect.top - tooltipH - 15;
+        y = mouseY - tooltipH - 15;
       }
       // Ensure tooltip doesn't bleed out top
       if (y < 10) {
@@ -366,19 +369,27 @@ export default function InstitutionalConsistencyMap({
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.12 }}
-                className="absolute bg-slate-900/95 border border-slate-700 text-white rounded p-3 shadow-xl pointer-events-none z-50 w-[200px]"
+                className="absolute bg-slate-950/95 border border-slate-700 text-white rounded-lg p-3 shadow-2xl pointer-events-none z-[9999] w-[230px]"
                 style={{ left: tooltipPos.x, top: tooltipPos.y }}
               >
-                <div className="font-sans font-black border-b border-slate-700 pb-1 mb-1.5 flex justify-between items-center">
-                  <span className="text-[12px] text-amber-400">{hoveredCommodity.name}</span>
-                  <span className="text-[9px] text-slate-400 font-mono bg-slate-800 px-1 py-0.2 rounded">
-                    {hoveredCommodity.sector}
+                <div className="font-sans font-black border-b border-slate-800 pb-1.5 mb-2 flex justify-between items-center">
+                  <span className="text-xs text-amber-400">{hoveredCommodity.name}</span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                    getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'long'
+                      ? 'bg-red-500/20 text-red-300'
+                      : getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'short'
+                        ? 'bg-green-500/20 text-green-300'
+                        : 'bg-slate-800 text-slate-300'
+                  }`}>
+                    {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'long' && "偏多"}
+                    {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'short' && "偏空"}
+                    {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'none' && "无信号"}
                   </span>
                 </div>
 
-                <div className="space-y-1 text-[11px]">
-                  <div className="flex justify-between border-b border-slate-800/40 pb-1 mb-1">
-                    <span className="text-slate-400">资金沉淀:</span>
+                <div className="space-y-1.5 text-[11px]">
+                  <div className="flex justify-between border-b border-slate-800 pb-1 mb-1">
+                    <span className="text-slate-400 font-sans">资金沉淀:</span>
                     <span className="font-mono font-bold text-amber-300">{hoveredCommodity.openInterest.toFixed(1)} 亿</span>
                   </div>
                   
@@ -401,21 +412,6 @@ export default function InstitutionalConsistencyMap({
                       <span className={`font-mono font-bold ${hoveredCommodity.positions.retail >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                         {hoveredCommodity.positions.retail > 0 ? '+' : ''}{hoveredCommodity.positions.retail.toFixed(1)} 亿
                       </span>
-                    </div>
-                  </div>
-
-                  {/* Bubble explanations */}
-                  <div className="mt-2.5 pt-2 border-t border-slate-800 text-[10px] space-y-1">
-                    <div className="text-slate-400 font-bold">气泡属性及定义:</div>
-                    <div className="text-slate-300">
-                      • <span className="text-amber-400 font-medium">气泡大小</span>: 代表该品种资金沉淀规模。
-                    </div>
-                    <div className="text-slate-300">
-                      • <span className="text-amber-400 font-medium">当前信号</span>: 
-                      {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'long' && " 偏多"}
-                      {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'short' && " 偏空"}
-                      {getCommodityCustomSignal(hoveredCommodity, signalConfig) === 'none' && " 无"}
-                      {isOriginalStrongSignal(hoveredCommodity) && " (重点关注)"}
                     </div>
                   </div>
                 </div>
