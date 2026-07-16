@@ -11,9 +11,10 @@ import {
 } from './data';
 import { Commodity } from './types';
 import SeatPositionSummary from './components/SeatPositionSummary';
+import CompanyFilterPage from './components/CompanyFilterPage';
 import SectorDirectionQuickView from './components/SectorDirectionQuickView';
 import InstitutionalConsistencyMap from './components/InstitutionalConsistencyMap';
-import EvaluationBadge from './components/EvaluationBadge';
+import EvaluationBadge, { getCommodityEvaluation } from './components/EvaluationBadge';
 import { 
   getCommodityCustomSignal, 
   isOriginalStrongSignal, 
@@ -62,9 +63,9 @@ export default function App() {
   const [focusedSeatType, setFocusedSeatType] = useState<'foreign' | 'institutional' | 'retail'>('foreign');
   const [selectedCompanies, setSelectedCompanies] = useState<Record<string, Record<'foreign' | 'institutional' | 'retail', string[]>>>({
     global: {
-      foreign: ['摩根大通期货', '乾坤期货', '瑞银证券', '高盛工银期货', '汇丰前海证券'],
-      institutional: ['国泰君安期货', '中信期货', '永安期货', '东证期货', '华泰期货', '银河期货', '广发期货', '申银万国期货'],
-      retail: ['东方财富期货', '中原期货', '平安证券期货']
+      foreign: ['摩根大通期货', '乾坤期货', '瑞银证券', '高盛工银期货', '汇丰前海证券', '野村东方国际'],
+      institutional: ['国泰君安期货', '中信期货', '永安期货', '东证期货', '华泰期货'],
+      retail: ['银河期货', '广发期货', '浙商期货']
     }
   });
 
@@ -120,7 +121,7 @@ export default function App() {
   const [compareMode, setCompareMode] = useState<'single' | 'multi'>('single');
 
   // Sorting states for Section 04 Core Variety Panorama
-  const [sortField, setSortField] = useState<'openInterest' | 'flow' | 'foreign' | 'institutional' | 'retail' | null>(null);
+  const [sortField, setSortField] = useState<'foreign' | 'institutional' | 'retail' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Hover state for Section 04 table rows to show exact position breakdown
@@ -139,10 +140,33 @@ export default function App() {
     localStorage.setItem('qd_futures_favorites', JSON.stringify(favorites));
   }, [favorites]);
 
-  // Get raw commodities for selected date (internal seat configuration calculations applied)
+  // Get raw commodities for selected date with dynamic seat configurations applied
   const rawCommodities = useMemo(() => {
-    return COMMODITIES_BY_DATE[effectiveDate] || COMMODITIES_BY_DATE["2026.06.29"];
-  }, [effectiveDate]);
+    const base = COMMODITIES_BY_DATE[effectiveDate] || COMMODITIES_BY_DATE["2026.06.29"];
+    
+    return base.map(item => {
+      // Resolve configuration for this specific variety; fallback to global
+      const config = selectedCompanies[item.id] || selectedCompanies.global;
+      
+      const foreignWeight = (config.foreign?.length || 0) / 6;
+      const institutionalWeight = (config.institutional?.length || 0) / 5;
+      const retailWeight = (config.retail?.length || 0) / 3;
+
+      return {
+        ...item,
+        positions: {
+          foreign: item.positions.foreign * foreignWeight,
+          institutional: item.positions.institutional * institutionalWeight,
+          retail: item.positions.retail * retailWeight
+        },
+        changes: {
+          foreign: item.changes.foreign * foreignWeight,
+          institutional: item.changes.institutional * institutionalWeight,
+          retail: item.changes.retail * retailWeight
+        }
+      };
+    });
+  }, [effectiveDate, selectedCompanies]);
 
   // Selected commodities for view/compare (single vs multiple)
   const [selectedCommodityIds, setSelectedCommodityIds] = useState<string[]>(['ZN']);
@@ -236,25 +260,8 @@ export default function App() {
     if (!sortField) return baseData;
     
     return [...baseData].sort((a, b) => {
-      let valA = 0;
-      let valB = 0;
-      if (sortField === 'openInterest') {
-        valA = a.openInterest;
-        valB = b.openInterest;
-      } else if (sortField === 'flow') {
-        valA = a.changes.foreign + a.changes.institutional;
-        valB = b.changes.foreign + b.changes.institutional;
-      } else if (sortField === 'foreign') {
-        valA = a.positions.foreign;
-        valB = b.positions.foreign;
-      } else if (sortField === 'institutional') {
-        valA = a.positions.institutional;
-        valB = b.positions.institutional;
-      } else if (sortField === 'retail') {
-        valA = a.positions.retail;
-        valB = b.positions.retail;
-      }
-      
+      const valA = a.positions[sortField];
+      const valB = b.positions[sortField];
       if (sortDirection === 'asc') {
         return valA - valB;
       } else {
@@ -263,7 +270,7 @@ export default function App() {
     });
   }, [compareMode, selectedCommoditiesList, filteredCommodities, sortField, sortDirection]);
 
-  const handleSort = (field: 'openInterest' | 'flow' | 'foreign' | 'institutional' | 'retail') => {
+  const handleSort = (field: 'foreign' | 'institutional' | 'retail') => {
     if (sortField === field) {
       if (sortDirection === 'desc') {
         setSortDirection('asc');
@@ -315,46 +322,20 @@ export default function App() {
   };
 
   const getCommoditySignalDesc = (c: Commodity) => {
-    const sig = getCommodityCustomSignal(c, signalConfig);
-    if (sig === 'long') {
-      return {
-        label: '偏多',
-        color: 'bg-red-50 text-red-700 border-red-200 font-extrabold',
-        tier: '用户自定义：偏多信号'
-      };
-    } else if (sig === 'short') {
-      return {
-        label: '偏空',
-        color: 'bg-green-50 text-green-700 border-green-200 font-extrabold',
-        tier: '用户自定义：偏空信号'
-      };
-    } else {
-      return {
-        label: '—',
-        color: 'bg-slate-50 text-slate-400 border-slate-200',
-        tier: '用户自定义：无信号'
-      };
-    }
+    const evaluation = getCommodityEvaluation(c);
+    return {
+      label: evaluation.label,
+      color: evaluation.badgeStyle,
+      tier: evaluation.tierIndex === 0 ? '第一分类：合力状态' : evaluation.tierIndex === 1 ? '第二分类：结构演变' : '第三分类：博弈分歧与低活跃观察'
+    };
   };
 
   const getBehaviorConclusion = (c: Commodity) => {
-    const sig = getCommodityCustomSignal(c, signalConfig);
-    if (sig === 'long') {
-      return {
-        label: '偏多',
-        color: 'bg-red-50 text-red-700 border-red-200 font-extrabold'
-      };
-    } else if (sig === 'short') {
-      return {
-        label: '偏空',
-        color: 'bg-green-50 text-green-700 border-green-200 font-extrabold'
-      };
-    } else {
-      return {
-        label: '—',
-        color: 'bg-slate-50 text-slate-400 border-slate-200'
-      };
-    }
+    const evaluation = getCommodityEvaluation(c);
+    return {
+      label: evaluation.label,
+      color: evaluation.badgeStyle
+    };
   };
 
   const formatFund = (num: number) => {
@@ -561,7 +542,16 @@ export default function App() {
       {/* OLD TOP CONTROL CONSOLE REMOVED */}
 
 
-      <div className="w-full max-w-[1750px] mx-auto px-4 py-6">
+      {viewMode === 'companyFilter' ? (
+        <CompanyFilterPage 
+          onBack={() => setViewMode('main')}
+          initialSeatType={focusedSeatType}
+          selectedCompanies={selectedCompanies}
+          onUpdateCompanies={setSelectedCompanies}
+          commodities={rawCommodities.map(c => ({ id: c.id, name: c.name }))}
+        />
+      ) : (
+        <div className="w-full max-w-[1750px] mx-auto px-4 py-6">
         <div className="flex flex-col lg:flex-row gap-6 items-start">
           
           {/* SIDEBAR 1: 持仓透视 MENU (Width-64, sticky, elegant light theme matching the red boxed region in user image) */}
@@ -669,6 +659,17 @@ export default function App() {
                       <span>配置筛选品种 ({selectedCommodityIds.length})</span>
                     </button>
                   )}
+                  
+                  <button
+                    onClick={() => {
+                      setFocusedSeatType('foreign');
+                      setViewMode('companyFilter');
+                    }}
+                    className="px-4 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer hover:scale-105 duration-150"
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                    <span>筛选席位</span>
+                  </button>
                 </div>
 
                 {/* Right: Favorites Toggle & Search bar */}
@@ -820,118 +821,125 @@ export default function App() {
                           </button>
                         </div>
 
-                        {/* Precise 2-Column 3-Row Grid Layout for Selected Signal */}
-                        <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-3xs">
+                        {/* Precise 3-Row Grid Layout for Selected Signal */}
+                        <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-3xs text-xs">
                           {/* Grid Header */}
-                          <div className="grid grid-cols-12 bg-slate-50/50 border-b border-slate-200 font-bold text-slate-700 p-2.5 text-xs text-center">
-                            <div className="col-span-4 text-left pl-2">监控维度 & 业务含义说明</div>
-                            <div className="col-span-8 text-left pl-4">筛选条件组合（勾选即启用为该信号的必要触发条件，不勾选即不设置）</div>
+                          <div className="grid grid-cols-12 bg-slate-50/50 border-b border-slate-200 font-bold text-slate-700 p-2.5">
+                            <div className="col-span-4 text-left pl-2">席位类别</div>
+                            <div className="col-span-4 text-left pl-4">持仓存量筛选 (Stock)</div>
+                            <div className="col-span-4 text-left pl-4">资金流量筛选 (Flow)</div>
                           </div>
 
-                          {/* Row 1: 持仓存量 */}
+                          {/* Row 1: 偏外资席位 */}
                           <div className="grid grid-cols-12 border-b border-slate-200 items-center">
-                            <div className="col-span-4 bg-slate-50/20 p-3 font-bold text-slate-700 border-r border-slate-200 pl-4.5">
-                              <div>持仓存量 (Stock)</div>
-                              <p className="text-[10px] text-slate-500 font-normal mt-0.5 leading-normal">
-                                存量指核心主力机构与偏外资的底仓持仓累积状态（如：存量“多头”表示机构和外资都是多头）。针对偏多和偏空信号，系统均提供了偏多与偏空两个独立选项供自由配置，二者非唯一绑定。
+                            <div className="col-span-4 bg-slate-50/10 p-3 font-bold text-slate-800 border-r border-slate-200 pl-4">
+                              <div>偏外资席位</div>
+                              <p className="text-[10px] text-slate-400 font-normal mt-0.5 leading-normal">
+                                代表海外QFI等外资代理机构
                               </p>
                             </div>
-                            <div className="col-span-8 p-3 pl-6 grid grid-cols-2 gap-4">
+                            <div className="col-span-4 p-3 pl-4">
                               <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
                                 <input 
                                   type="checkbox" 
-                                  checked={signalConfigTab === 'long' ? signalConfig.long_stock_long : signalConfig.short_stock_long}
+                                  checked={signalConfigTab === 'long' ? signalConfig.long_foreign_stock_long : signalConfig.short_foreign_stock_short}
                                   onChange={() => setSignalConfig(prev => ({
                                     ...prev,
-                                    [signalConfigTab === 'long' ? 'long_stock_long' : 'short_stock_long']: !prev[signalConfigTab === 'long' ? 'long_stock_long' : 'short_stock_long']
+                                    [signalConfigTab === 'long' ? 'long_foreign_stock_long' : 'short_foreign_stock_short']: !prev[signalConfigTab === 'long' ? 'long_foreign_stock_long' : 'short_foreign_stock_short']
                                   }))}
                                   className={`rounded border-slate-300 h-4 w-4 cursor-pointer ${signalConfigTab === 'long' ? 'text-red-600 focus:ring-red-500/20' : 'text-green-600 focus:ring-green-500/20'}`}
                                 />
-                                <span>主力持仓偏多</span>
+                                <span>{signalConfigTab === 'long' ? '存量偏多 (>= 0)' : '存量偏空 (<= 0)'}</span>
                               </label>
+                            </div>
+                            <div className="col-span-4 p-3 pl-4">
                               <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
                                 <input 
                                   type="checkbox" 
-                                  checked={signalConfigTab === 'long' ? signalConfig.long_stock_short : signalConfig.short_stock_short}
+                                  checked={signalConfigTab === 'long' ? signalConfig.long_foreign_flow_long : signalConfig.short_foreign_flow_short}
                                   onChange={() => setSignalConfig(prev => ({
                                     ...prev,
-                                    [signalConfigTab === 'long' ? 'long_stock_short' : 'short_stock_short']: !prev[signalConfigTab === 'long' ? 'long_stock_short' : 'short_stock_short']
+                                    [signalConfigTab === 'long' ? 'long_foreign_flow_long' : 'short_foreign_flow_short']: !prev[signalConfigTab === 'long' ? 'long_foreign_flow_long' : 'short_foreign_flow_short']
                                   }))}
                                   className={`rounded border-slate-300 h-4 w-4 cursor-pointer ${signalConfigTab === 'long' ? 'text-red-600 focus:ring-red-500/20' : 'text-green-600 focus:ring-green-500/20'}`}
                                 />
-                                <span>主力持仓偏空</span>
+                                <span>{signalConfigTab === 'long' ? '单日流入 (>= 0)' : '单日流出 (<= 0)'}</span>
                               </label>
                             </div>
                           </div>
 
-                          {/* Row 2: 资金流量 */}
+                          {/* Row 2: 成交量前五会员 */}
                           <div className="grid grid-cols-12 border-b border-slate-200 items-center">
-                            <div className="col-span-4 bg-slate-50/20 p-3 font-bold text-slate-700 border-r border-slate-200 pl-4.5">
-                              <div>资金流量 (Flow)</div>
-                              <p className="text-[10px] text-slate-500 font-normal mt-0.5 leading-normal">
-                                流量指今日主力会员的净加减仓方向（如：流量“流入”代表今日主力一致做多加仓）。偏多与偏空信号中均提供了流入和流出两个备选项，支持自定义配置多种强弱博弈组合。
+                            <div className="col-span-4 bg-slate-50/10 p-3 font-bold text-slate-800 border-r border-slate-200 pl-4">
+                              <div>成交量前五会员</div>
+                              <p className="text-[10px] text-slate-400 font-normal mt-0.5 leading-normal">
+                                代表市场交易最活跃的头部清算会员
                               </p>
                             </div>
-                            <div className="col-span-8 p-3 pl-6 grid grid-cols-2 gap-4">
+                            <div className="col-span-4 p-3 pl-4">
                               <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
                                 <input 
                                   type="checkbox" 
-                                  checked={signalConfigTab === 'long' ? signalConfig.long_flow_long : signalConfig.short_flow_long}
+                                  checked={signalConfigTab === 'long' ? signalConfig.long_top5_stock_long : signalConfig.short_top5_stock_short}
                                   onChange={() => setSignalConfig(prev => ({
                                     ...prev,
-                                    [signalConfigTab === 'long' ? 'long_flow_long' : 'short_flow_long']: !prev[signalConfigTab === 'long' ? 'long_flow_long' : 'short_flow_long']
+                                    [signalConfigTab === 'long' ? 'long_top5_stock_long' : 'short_top5_stock_short']: !prev[signalConfigTab === 'long' ? 'long_top5_stock_long' : 'short_top5_stock_short']
                                   }))}
                                   className={`rounded border-slate-300 h-4 w-4 cursor-pointer ${signalConfigTab === 'long' ? 'text-red-600 focus:ring-red-500/20' : 'text-green-600 focus:ring-green-500/20'}`}
                                 />
-                                <span>主力流量流入</span>
+                                <span>{signalConfigTab === 'long' ? '存量偏多 (>= 0)' : '存量偏空 (<= 0)'}</span>
                               </label>
+                            </div>
+                            <div className="col-span-4 p-3 pl-4">
                               <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
                                 <input 
                                   type="checkbox" 
-                                  checked={signalConfigTab === 'long' ? signalConfig.long_flow_short : signalConfig.short_flow_short}
+                                  checked={signalConfigTab === 'long' ? signalConfig.long_top5_flow_long : signalConfig.short_top5_flow_short}
                                   onChange={() => setSignalConfig(prev => ({
                                     ...prev,
-                                    [signalConfigTab === 'long' ? 'long_flow_short' : 'short_flow_short']: !prev[signalConfigTab === 'long' ? 'long_flow_short' : 'short_flow_short']
+                                    [signalConfigTab === 'long' ? 'long_top5_flow_long' : 'short_top5_flow_short']: !prev[signalConfigTab === 'long' ? 'long_top5_flow_long' : 'short_top5_flow_short']
                                   }))}
                                   className={`rounded border-slate-300 h-4 w-4 cursor-pointer ${signalConfigTab === 'long' ? 'text-red-600 focus:ring-red-500/20' : 'text-green-600 focus:ring-green-500/20'}`}
                                 />
-                                <span>主力流量流出</span>
+                                <span>{signalConfigTab === 'long' ? '单日流入 (>= 0)' : '单日流出 (<= 0)'}</span>
                               </label>
                             </div>
                           </div>
 
-                          {/* Row 3: 零售方向 */}
+                          {/* Row 3: 用户自定义席位 */}
                           <div className="grid grid-cols-12 items-center">
-                            <div className="col-span-4 bg-slate-50/20 p-3 font-bold text-slate-700 border-r border-slate-200 pl-4.5">
-                              <div>零售方向 (Retail)</div>
-                              <p className="text-[10px] text-slate-500 font-normal mt-0.5 leading-normal">
-                                零售方向指普通零售散户日内的持仓变动方向。同向指散户跟风买卖（与主力方向相同），反向指散户逆势做对立（与主力方向相反）。
+                            <div className="col-span-4 bg-slate-50/10 p-3 font-bold text-slate-800 border-r border-slate-200 pl-4">
+                              <div>用户自定义席位</div>
+                              <p className="text-[10px] text-slate-400 font-normal mt-0.5 leading-normal">
+                                代表用户自由定制筛选的一批特色公司席位
                               </p>
                             </div>
-                            <div className="col-span-8 p-3 pl-6 grid grid-cols-2 gap-4">
+                            <div className="col-span-4 p-3 pl-4">
                               <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
                                 <input 
                                   type="checkbox" 
-                                  checked={signalConfigTab === 'long' ? signalConfig.long_retail_same : signalConfig.short_retail_same}
+                                  checked={signalConfigTab === 'long' ? signalConfig.long_custom_stock_long : signalConfig.short_custom_stock_short}
                                   onChange={() => setSignalConfig(prev => ({
                                     ...prev,
-                                    [signalConfigTab === 'long' ? 'long_retail_same' : 'short_retail_same']: !prev[signalConfigTab === 'long' ? 'long_retail_same' : 'short_retail_same']
+                                    [signalConfigTab === 'long' ? 'long_custom_stock_long' : 'short_custom_stock_short']: !prev[signalConfigTab === 'long' ? 'long_custom_stock_long' : 'short_custom_stock_short']
                                   }))}
                                   className={`rounded border-slate-300 h-4 w-4 cursor-pointer ${signalConfigTab === 'long' ? 'text-red-600 focus:ring-red-500/20' : 'text-green-600 focus:ring-green-500/20'}`}
                                 />
-                                <span>零售同向</span>
+                                <span>{signalConfigTab === 'long' ? '存量偏多 (>= 0)' : '存量偏空 (<= 0)'}</span>
                               </label>
+                            </div>
+                            <div className="col-span-4 p-3 pl-4">
                               <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
                                 <input 
                                   type="checkbox" 
-                                  checked={signalConfigTab === 'long' ? signalConfig.long_retail_opposite : signalConfig.short_retail_opposite}
+                                  checked={signalConfigTab === 'long' ? signalConfig.long_custom_flow_long : signalConfig.short_custom_flow_short}
                                   onChange={() => setSignalConfig(prev => ({
                                     ...prev,
-                                    [signalConfigTab === 'long' ? 'long_retail_opposite' : 'short_retail_opposite']: !prev[signalConfigTab === 'long' ? 'long_retail_opposite' : 'short_retail_opposite']
+                                    [signalConfigTab === 'long' ? 'long_custom_flow_long' : 'short_custom_flow_short']: !prev[signalConfigTab === 'long' ? 'long_custom_flow_long' : 'short_custom_flow_short']
                                   }))}
                                   className={`rounded border-slate-300 h-4 w-4 cursor-pointer ${signalConfigTab === 'long' ? 'text-red-600 focus:ring-red-500/20' : 'text-green-600 focus:ring-green-500/20'}`}
                                 />
-                                <span>零售反向</span>
+                                <span>{signalConfigTab === 'long' ? '单日流入 (>= 0)' : '单日流出 (<= 0)'}</span>
                               </label>
                             </div>
                           </div>
@@ -946,13 +954,13 @@ export default function App() {
                           <div className="pt-0.5">
                             {signalConfigTab === 'long' ? (
                               <div>
-                                <span className="font-bold text-red-700">■ 偏多默认推荐配置</span>: <b>存量偏多 + 流量流入 + 零售同向。</b>
-                                <p className="text-[10.5px] text-slate-500 mt-0.5">当主力持仓底仓偏多、日内资金净流入，且零售资金同向跟风买入时触发，指示极佳的突破趋势向上共识形态。</p>
+                                <span className="font-bold text-red-700">■ 三类席位一致偏多默认推荐配置</span>: <b>偏外资、成交量前五、用户自定义三类席位的流量和存量都偏多。</b>
+                                <p className="text-[10.5px] text-slate-500 mt-0.5">当三类席位在持仓和资金流向均形成多头共振（共同加仓或持多头底仓）时触发多头信号。</p>
                               </div>
                             ) : (
                               <div>
-                                <span className="font-bold text-green-700">■ 偏空默认推荐配置</span>: <b>存量偏空 + 流量流出 + 零售同向。</b>
-                                <p className="text-[10.5px] text-slate-500 mt-0.5">当主力持仓底仓偏空、日内资金净流出，且零售资金同向跟风卖出时触发，指示顺势的突破趋势向下共识形态。</p>
+                                <span className="font-bold text-green-700">■ 三类席位一致偏空默认推荐配置</span>: <b>偏外资、成交量前五、用户自定义三类席位的流量和存量都偏空。</b>
+                                <p className="text-[10.5px] text-slate-500 mt-0.5">当三类席位在持仓和资金流向均形成空头共振（共同减仓或持空头底仓）时触发空头信号。</p>
                               </div>
                             )}
                           </div>
@@ -1002,7 +1010,28 @@ export default function App() {
                     {selectedCommodity.sector}
                   </span>
 
-                  <EvaluationBadge commodity={selectedCommodity} showTooltipBelow={true} />
+                  {(() => {
+                    const sig = getCommodityCustomSignal(selectedCommodity, signalConfig);
+                    if (sig === 'long') {
+                      return (
+                        <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 px-2.5 py-1 rounded-md font-sans font-extrabold text-[11px] border border-red-200 shadow-3xs">
+                          <ArrowUpRight className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                          <span>偏多</span>
+                        </span>
+                      );
+                    } else if (sig === 'short') {
+                      return (
+                        <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2.5 py-1 rounded-md font-sans font-extrabold text-[11px] border border-green-200 shadow-3xs">
+                          <ArrowDownRight className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                          <span>偏少</span>
+                        </span>
+                      );
+                    } else {
+                      return (
+                        <span className="text-slate-400 font-mono font-bold text-[11px] bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-md">-</span>
+                      );
+                    }
+                  })()}
                 </div>
 
                 {/* Horizontal positions stats */}
@@ -1016,7 +1045,7 @@ export default function App() {
                   <div className="flex items-center gap-2 border-l border-slate-100 pl-4">
                     <span className="text-slate-400 flex items-center gap-0.5">
                       <span>外资:</span>
-                      <Globe className="w-3.5 h-3.5 text-blue-500" />
+                      <Globe className="w-3.5 h-3.5 text-sky-600" />
                     </span>
                     <span className={`font-mono font-bold ${selectedCommodity.positions.foreign >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatFund(selectedCommodity.positions.foreign)}
@@ -1034,7 +1063,7 @@ export default function App() {
                   {/* Institutional */}
                   <div className="flex items-center gap-2 border-l border-slate-100 pl-4">
                     <span className="text-slate-400 flex items-center gap-0.5">
-                      <span>机构:</span>
+                      <span>成交量前五:</span>
                       <Building2 className="w-3.5 h-3.5 text-red-600" />
                     </span>
                     <span className={`font-mono font-bold ${selectedCommodity.positions.institutional >= 0 ? 'text-red-600' : 'text-green-600'}`}>
@@ -1053,8 +1082,8 @@ export default function App() {
                   {/* Retail */}
                   <div className="flex items-center gap-2 border-l border-slate-100 pl-4">
                     <span className="text-slate-400 flex items-center gap-0.5">
-                      <span>散户:</span>
-                      <Users className="w-3.5 h-3.5 text-slate-500" />
+                      <span>自定:</span>
+                      <Users className="w-3.5 h-3.5 text-purple-600" />
                     </span>
                     <span className={`font-mono font-bold ${selectedCommodity.positions.retail >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatFund(selectedCommodity.positions.retail)}
@@ -1080,6 +1109,10 @@ export default function App() {
                     commodities={compareMode === 'multi' ? selectedCommoditiesList : rawCommodities} 
                     onSignalFilter={setActiveFilter}
                     activeFilter={activeFilter}
+                    onNavigateToFilter={(seatType) => {
+                      setFocusedSeatType(seatType);
+                      setViewMode('companyFilter');
+                    }}
                     signalConfig={signalConfig}
                   />
                 </div>
@@ -1126,23 +1159,23 @@ export default function App() {
 
               <div className="bg-white border border-slate-200 rounded-lg overflow-visible shadow-sm mt-4">
                 <div className="overflow-x-auto overflow-visible">
-                                  <table className="w-full text-left border-collapse text-xs table-fixed min-w-[1300px]">
+                  <table className="w-full text-left border-collapse text-xs table-fixed min-w-[1150px]">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-medium font-sans text-[11px]">
                         <th className="p-3 pl-4 w-12 text-center sticky left-0 bg-slate-50 z-40 border-r border-slate-200">自选</th>
                         <th className="p-3 w-24 sticky left-12 bg-slate-50 z-40 border-r border-slate-200">品种名称</th>
                         <th className="p-3 w-24 sticky left-36 bg-slate-50 z-40 border-r-2 border-slate-300">主力合约</th>
                         <th className="p-3 w-40 text-center relative">
-                          <span>机构一致性</span>
+                          <span>三类席位一致性</span>
                           <span className="text-[9px] text-slate-400 block font-normal">鼠标悬停透视详细头寸</span>
                         </th>
                         <th 
                           onClick={() => handleSort('foreign')}
-                          className="p-3 w-36 cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                          className="p-3 w-32 cursor-pointer hover:bg-slate-100 transition-colors select-none"
                           title="点击按外资持仓量排序"
                         >
                           <div className="flex items-center gap-1">
-                            <Globe className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                            <Globe className="w-3.5 h-3.5 text-sky-500 shrink-0" />
                             <span>偏外资持仓</span>
                             <span className="flex flex-col text-[8px] leading-[6px] text-slate-400">
                               <span className={sortField === 'foreign' && sortDirection === 'asc' ? 'text-blue-600' : ''}>▲</span>
@@ -1152,12 +1185,12 @@ export default function App() {
                         </th>
                         <th 
                           onClick={() => handleSort('institutional')}
-                          className="p-3 w-36 cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                          title="点击按机构持仓量排序"
+                          className="p-3 w-32 cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                          title="点击按成交量前五持仓量排序"
                         >
                           <div className="flex items-center gap-1">
                             <Building2 className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                            <span>偏机构持仓</span>
+                            <span>成交量前五持仓</span>
                             <span className="flex flex-col text-[8px] leading-[6px] text-slate-400">
                               <span className={sortField === 'institutional' && sortDirection === 'asc' ? 'text-blue-600' : ''}>▲</span>
                               <span className={sortField === 'institutional' && sortDirection === 'desc' ? 'text-blue-600' : ''}>▼</span>
@@ -1166,12 +1199,12 @@ export default function App() {
                         </th>
                         <th 
                           onClick={() => handleSort('retail')}
-                          className="p-3 w-36 cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                          title="点击按零售持仓量排序"
+                          className="p-3 w-32 cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                          title="点击按自定义持仓量排序"
                         >
                           <div className="flex items-center gap-1">
-                            <Users className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                            <span>偏零售持仓</span>
+                            <Users className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                            <span>用户自定义持仓</span>
                             <span className="flex flex-col text-[8px] leading-[6px] text-slate-400">
                               <span className={sortField === 'retail' && sortDirection === 'asc' ? 'text-blue-600' : ''}>▲</span>
                               <span className={sortField === 'retail' && sortDirection === 'desc' ? 'text-blue-600' : ''}>▼</span>
@@ -1179,32 +1212,39 @@ export default function App() {
                           </div>
                         </th>
                         <th className="p-3 w-[170px]">三类席位今日变化 (单位: 亿)</th>
-                        <th className="p-3 w-24 text-center font-bold text-slate-700">重点关注</th>
-                        <th className="p-3 w-24 text-center font-bold text-slate-800">一致性状态</th>
+                        <th className="p-3 w-24 text-center">重点关注</th>
+                        <th className="p-3 w-24 text-center">一致性状态</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700 overflow-visible">
                       {sortedTableData.map((c, idx) => {
                         const isSelected = selectedCommodityIds.includes(c.id);
                         const isFavorited = favorites.includes(c.id);
+                        const signal = getCommoditySignalDesc(c);
                         const showTooltipBelow = idx < 2;
 
+                        // Position details
                         const fVal = c.positions.foreign;
                         const iVal = c.positions.institutional;
                         const rVal = c.positions.retail;
 
+                        // Changes details
                         const fChg = c.changes.foreign;
                         const iChg = c.changes.institutional;
                         const rChg = c.changes.retail;
 
+                        // Consensus value of Foreign & Institutional
                         const consensusSum = fVal + iVal;
                         const hasSameDirection = (fVal > 0 && iVal > 0) || (fVal < 0 && iVal < 0);
+
+                        // Position Behavior Tag label
+                        const fBehavior = getBehavior(fVal, fChg);
+                        const iBehavior = getBehavior(iVal, iChg);
+                        const rBehavior = getBehavior(rVal, rChg);
 
                         return (
                           <tr 
                             key={c.id}
-                            onMouseEnter={() => setHoveredRowId(c.id)}
-                            onMouseLeave={() => setHoveredRowId(null)}
                             className={`group hover:bg-slate-50/80 transition-colors relative overflow-visible z-10 hover:z-40 ${isSelected ? 'bg-blue-50/10 font-medium' : ''}`}
                           >
                             {/* Star Selection */}
@@ -1232,187 +1272,231 @@ export default function App() {
                               </span>
                             </td>
 
-                            {/* Visual Consistency Multi-Axis Axis Indicator */}
-                            <td className="p-3 text-center relative overflow-visible bg-slate-50/20">
-                              <div className="w-full flex items-center justify-center h-6 relative">
-                                {/* Thin background axis track */}
-                                <div className="absolute left-2 right-2 h-0.5 bg-slate-200 top-1/2 -translate-y-1/2 rounded-full" />
-                                
-                                {/* Center 0 marker line */}
-                                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1px] h-3 bg-slate-400" />
 
-                                {/* Thin consensus color bar */}
-                                <div className="absolute left-2 right-2 h-1 top-1/2 -translate-y-1/2 relative overflow-visible">
-                                  {consensusSum < 0 ? (
-                                    <div 
-                                      className={`absolute right-1/2 h-1 rounded-l-full bg-gradient-to-l ${
-                                        hasSameDirection ? 'from-green-500 to-green-300' : 'from-slate-400 to-slate-300'
-                                      }`}
-                                      style={{ width: `${Math.min((Math.abs(consensusSum) / (maxPositionLimit || 50)) * 50, 50)}%` }}
-                                    />
-                                  ) : (
-                                    <div 
-                                      className={`absolute left-1/2 h-1 rounded-r-full bg-gradient-to-r ${
-                                        hasSameDirection ? 'from-red-500 to-red-300' : 'from-slate-400 to-slate-300'
-                                      }`}
-                                      style={{ width: `${Math.min((consensusSum / (maxPositionLimit || 50)) * 50, 50)}%` }}
-                                    />
-                                  )}
+
+                            {/* 机构一致性 数轴与Hover细节 (Satisfying Request #4) */}
+                            <td 
+                              className="p-3 text-center relative overflow-visible select-none cursor-help"
+                              onMouseEnter={() => setHoveredRowId(c.id)}
+                              onMouseLeave={() => setHoveredRowId(null)}
+                            >
+                              <div className="flex flex-col items-center justify-center">
+                                {/* Coordinate Number Axis with Foreign, Top 5 Volume, Custom markers */}
+                                <div className="w-full max-w-[125px] h-6 relative flex items-center justify-center select-none">
+                                  {/* Axis line */}
+                                  <div className="absolute left-0 right-0 h-[2px] bg-slate-300"></div>
+                                  {/* Central zero tick */}
+                                  <div className="absolute left-1/2 top-1 bottom-1 w-[1.5px] bg-slate-400"></div>
+                                  
+                                  {/* Foreign dot */}
+                                  <div 
+                                    className="absolute w-2.5 h-2.5 rounded-full bg-sky-500 border border-white shadow-xs -translate-x-1/2 z-20 hover:scale-130 transition-transform"
+                                    style={{ left: `${Math.max(3, Math.min(97, 50 + (fVal / maxPositionLimit) * 50))}%` }}
+                                    title={`偏外资持仓: ${fVal >= 0 ? '+' : ''}${fVal.toFixed(1)} 亿`}
+                                  ></div>
+                                  
+                                  {/* Institutional dot */}
+                                  <div 
+                                    className="absolute w-2.5 h-2.5 rounded-full bg-red-500 border border-white shadow-xs -translate-x-1/2 z-20 hover:scale-130 transition-transform"
+                                    style={{ left: `${Math.max(3, Math.min(97, 50 + (iVal / maxPositionLimit) * 50))}%` }}
+                                    title={`成交量前五持仓: ${iVal >= 0 ? '+' : ''}${iVal.toFixed(1)} 亿`}
+                                  ></div>
+
+                                  {/* Custom dot */}
+                                  <div 
+                                    className="absolute w-2.5 h-2.5 rounded-full bg-purple-500 border border-white shadow-xs -translate-x-1/2 z-20 hover:scale-130 transition-transform"
+                                    style={{ left: `${Math.max(3, Math.min(97, 50 + (rVal / maxPositionLimit) * 50))}%` }}
+                                    title={`用户自定义持仓: ${rVal >= 0 ? '+' : ''}${rVal.toFixed(1)} 亿`}
+                                  ></div>
                                 </div>
 
-                                {/* Foreign Dot (Blue) */}
-                                <div 
-                                  className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-500 border border-white shadow-xs cursor-help transition-all duration-150 hover:scale-125 z-20"
-                                  style={{ left: `${50 + (fVal / (maxPositionLimit || 50)) * 50}%` }}
-                                  title={`偏外资持仓: ${formatFund(fVal)}`}
-                                />
-
-                                {/* Institutional Dot (Red) */}
-                                <div 
-                                  className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-red-500 border border-white shadow-xs cursor-help transition-all duration-150 hover:scale-125 z-20"
-                                  style={{ left: `${50 + (iVal / (maxPositionLimit || 50)) * 50}%` }}
-                                  title={`偏机构持仓: ${formatFund(iVal)}`}
-                                />
+                                <div className="text-[9px] font-sans text-slate-400 mt-1 flex gap-1 justify-center leading-none">
+                                  <span className="flex items-center gap-0.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+                                    外:{fVal.toFixed(1)}
+                                  </span>
+                                  <span className="flex items-center gap-0.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                    五:{iVal.toFixed(1)}
+                                  </span>
+                                  <span className="flex items-center gap-0.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                                    定:{rVal.toFixed(1)}
+                                  </span>
+                                </div>
                               </div>
 
-                              {hoveredRowId === c.id && (
-                                <div className={`absolute z-50 ${showTooltipBelow ? 'top-full mt-1' : 'bottom-full mb-1'} left-1/2 -translate-x-1/2 w-56 bg-slate-900 text-white rounded-lg p-3 shadow-xl border border-slate-700 font-sans`}>
-                                  <span className="text-[10px] text-slate-400 font-bold block mb-1 border-b border-slate-800 pb-1 font-sans">{c.name} ({c.id}) 席位大单明细</span>
-                                  <div className="space-y-1.5 text-[10px] font-mono">
-                                    <div className="flex justify-between">
-                                      <span className="text-slate-400">偏外资累计净持:</span>
-                                      <span className={fVal >= 0 ? 'text-red-400' : 'text-green-400'}>{formatFund(fVal)}</span>
+                              {/* STUNNING VISUAL FLOATING TOOLTIP on Hover (Satisfying request detail: hover on axis shows foreign, institutional, custom exact positions) */}
+                              <AnimatePresence>
+                                {hoveredRowId === c.id && (
+                                  <motion.div
+                                    initial={{ opacity: 0, y: showTooltipBelow ? -5 : 5, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: showTooltipBelow ? -5 : 5 }}
+                                    className={`absolute left-1/2 -translate-x-1/2 ${showTooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'} z-50 bg-slate-900 text-slate-100 p-3 rounded-lg shadow-xl text-[11px] font-sans w-52 leading-relaxed border border-slate-700 pointer-events-none text-left`}
+                                  >
+                                    <div className="font-bold border-b border-slate-800 pb-1 mb-1.5 text-amber-400 flex justify-between items-center">
+                                      <span>{c.name} 三席头寸拆解</span>
+                                      <span className="text-[9px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded font-normal">QD</span>
                                     </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-slate-400">偏机构累计净持:</span>
-                                      <span className={iVal >= 0 ? 'text-red-400' : 'text-green-400'}>{formatFund(iVal)}</span>
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between">
+                                        <span className="text-slate-400">偏外资持仓:</span>
+                                        <strong className={fVal >= 0 ? 'text-red-400' : 'text-green-400'}>
+                                          {fVal >= 0 ? '+' : ''}{fVal.toFixed(1)} 亿
+                                        </strong>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-slate-400">成交量前五持仓:</span>
+                                        <strong className={iVal >= 0 ? 'text-red-400' : 'text-green-400'}>
+                                          {iVal >= 0 ? '+' : ''}{iVal.toFixed(1)} 亿
+                                        </strong>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-slate-400">用户自定义持仓:</span>
+                                        <strong className={rVal >= 0 ? 'text-red-400' : 'text-green-400'}>
+                                          {rVal >= 0 ? '+' : ''}{rVal.toFixed(1)} 亿
+                                        </strong>
+                                      </div>
+                                      <div className="flex justify-between border-t border-slate-800 mt-1 pt-1 text-[10px]">
+                                        <span className="text-slate-400">三席一致性状态:</span>
+                                        <span className="text-slate-200">
+                                          {((fVal >= 0 && iVal >= 0 && rVal >= 0) || (fVal <= 0 && iVal <= 0 && rVal <= 0)) ? '三席完全一致' : '多空意见分歧'}
+                                        </span>
+                                      </div>
                                     </div>
-                                    <div className="flex justify-between border-t border-slate-800 pt-1">
-                                      <span className="text-slate-400">合计两类机构仓:</span>
-                                      <span className={consensusSum >= 0 ? 'text-red-400' : 'text-green-400'}>{formatFund(consensusSum)}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-slate-400">散户逆向持仓:</span>
-                                      <span className={rVal >= 0 ? 'text-red-400' : 'text-green-400'}>{formatFund(rVal)}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
+                                    {/* Arrow */}
+                                    {showTooltipBelow ? (
+                                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-1 border-4 border-transparent border-b-slate-900"></div>
+                                    ) : (
+                                      <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-slate-900"></div>
+                                    )}
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
                             </td>
 
-                            {/* 偏外资持仓 */}
-                            <td className="p-3 font-mono font-bold">
-                              <div className="flex flex-col">
-                                <span className={fVal >= 0 ? 'text-red-600' : 'text-green-600'}>
+                            {/* 偏外资持仓与条形图 */}
+                            <td className="p-3">
+                              <div className="flex flex-col gap-0.5">
+                                <span className={`font-mono font-bold ${fVal >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                                   {formatFund(fVal)}
                                 </span>
-                                <span className="text-[9px] text-slate-400 font-normal">
-                                  今日变动: <strong className={fChg >= 0 ? 'text-red-600' : 'text-green-600'}>{fChg >= 0 ? '+' : ''}{fChg.toFixed(1)}亿</strong>
-                                </span>
+                                {/* Bidirectional Mini bar */}
+                                <div className="w-24 bg-slate-100 h-1 rounded-full relative overflow-hidden">
+                                  <div 
+                                    className={`absolute top-0 bottom-0 ${fVal >= 0 ? 'left-1/2 bg-red-500 rounded-r-full' : 'right-1/2 bg-green-500 rounded-l-full'}`}
+                                    style={{ width: `${Math.min((Math.abs(fVal) / maxPositionLimit) * 50, 50)}%` }}
+                                  ></div>
+                                </div>
                               </div>
                             </td>
 
-                            {/* 偏机构持仓 */}
-                            <td className="p-3 font-mono font-bold">
-                              <div className="flex flex-col">
-                                <span className={iVal >= 0 ? 'text-red-600' : 'text-green-600'}>
+                            {/* 成交量前五持仓与条形图 */}
+                            <td className="p-3">
+                              <div className="flex flex-col gap-0.5">
+                                <span className={`font-mono font-bold ${iVal >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                                   {formatFund(iVal)}
                                 </span>
-                                <span className="text-[9px] text-slate-400 font-normal">
-                                  今日变动: <strong className={iChg >= 0 ? 'text-red-600' : 'text-green-600'}>{iChg >= 0 ? '+' : ''}{iChg.toFixed(1)}亿</strong>
-                                </span>
+                                {/* Bidirectional Mini bar */}
+                                <div className="w-24 bg-slate-100 h-1 rounded-full relative overflow-hidden">
+                                  <div 
+                                    className={`absolute top-0 bottom-0 ${iVal >= 0 ? 'left-1/2 bg-red-500 rounded-r-full' : 'right-1/2 bg-green-500 rounded-l-full'}`}
+                                    style={{ width: `${Math.min((Math.abs(iVal) / maxPositionLimit) * 50, 50)}%` }}
+                                  ></div>
+                                </div>
                               </div>
                             </td>
 
-                            {/* 偏零售持仓 */}
-                            <td className="p-3 font-mono">
-                              <div className="flex flex-col">
-                                <span className={rVal >= 0 ? 'text-slate-800 font-bold' : 'text-slate-600'}>
+                            {/* 用户自定义持仓与条形图 */}
+                            <td className="p-3">
+                              <div className="flex flex-col gap-0.5">
+                                <span className={`font-mono font-bold ${rVal >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                                   {formatFund(rVal)}
                                 </span>
-                                <span className="text-[9px] text-slate-400 font-normal">
-                                  今日变动: <strong className={rChg >= 0 ? 'text-red-600' : 'text-green-600'}>{rChg >= 0 ? '+' : ''}{rChg.toFixed(1)}亿</strong>
-                                </span>
+                                {/* Bidirectional Mini bar */}
+                                <div className="w-24 bg-slate-100 h-1 rounded-full relative overflow-hidden">
+                                  <div 
+                                    className={`absolute top-0 bottom-0 ${rVal >= 0 ? 'left-1/2 bg-red-500 rounded-r-full' : 'right-1/2 bg-green-500 rounded-l-full'}`}
+                                    style={{ width: `${Math.min((Math.abs(rVal) / maxPositionLimit) * 50, 50)}%` }}
+                                  ></div>
+                                </div>
                               </div>
                             </td>
 
-                            {/* 三类席位今日变化 */}
-                            <td className="p-2 w-[180px] text-[10px] font-sans">
-                              <div className="space-y-1 flex flex-col justify-center h-full">
-                                {/* 外资 flow axis */}
-                                <div className="flex items-center gap-1">
-                                  <span className="w-8 flex items-center gap-0.5 shrink-0 text-slate-500 font-bold" title="偏外资席位"><span>外</span><Globe className="w-3 h-3 text-blue-500" /></span>
-                                  <div className="flex-1 bg-slate-100 h-2 rounded-sm relative overflow-hidden border border-slate-200">
-                                    <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-slate-300" />
-                                    {fChg >= 0 ? (
-                                      <div 
-                                        className="absolute left-1/2 top-0 bottom-0 bg-red-500 rounded-r-xs"
-                                        style={{ width: `${Math.min((fChg / 10) * 50, 50)}%` }}
-                                      />
-                                    ) : (
-                                      <div 
-                                        className="absolute right-1/2 top-0 bottom-0 bg-green-500 rounded-l-xs"
-                                        style={{ width: `${Math.min((Math.abs(fChg) / 10) * 50, 50)}%` }}
-                                      />
-                                    )}
+                            {/* 三类席位局部的今日持仓变化 */}
+                            <td className="p-3 text-[10px]">
+                              <div className="flex flex-col gap-1 w-full max-w-[155px]">
+                                
+                                {/* Foreign Change */}
+                                <div className="flex items-center gap-1 leading-none justify-between">
+                                  <div className="flex items-center gap-0.5 w-[54px] shrink-0">
+                                    <span className="text-[9px] text-slate-400 font-sans">外</span>
+                                    <Globe className="w-2.5 h-2.5 text-sky-500 shrink-0" />
+                                    <span className={`text-[8px] px-0.5 py-0.2 rounded-xs leading-normal font-sans font-bold text-center ${getChgBehaviorLabelAndStyle(fVal, fChg).style}`}>
+                                      {getChgBehaviorLabelAndStyle(fVal, fChg).label}
+                                    </span>
                                   </div>
-                                  <span className={`w-11 text-right font-mono font-bold shrink-0 text-[10px] ${fChg >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  <div className="flex-1 bg-slate-100 h-1 rounded-full relative overflow-hidden border border-slate-200/30">
+                                    <div 
+                                      className={`absolute top-0 bottom-0 ${fChg >= 0 ? 'left-1/2 bg-red-500' : 'right-1/2 bg-green-500'}`}
+                                      style={{ width: `${Math.min((Math.abs(fChg) / maxChangeLimit) * 50, 50)}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className={`font-mono text-[9px] w-12 text-right ${fChg >= 0 ? 'text-red-600' : 'text-green-600'} shrink-0`}>
                                     {fChg >= 0 ? '+' : ''}{fChg.toFixed(1)}
                                   </span>
                                 </div>
 
-                                {/* 机构 flow axis */}
-                                <div className="flex items-center gap-1">
-                                  <span className="w-8 flex items-center gap-0.5 shrink-0 text-slate-500 font-bold" title="偏机构席位"><span>机</span><Building2 className="w-3 h-3 text-red-500" /></span>
-                                  <div className="flex-1 bg-slate-100 h-2 rounded-sm relative overflow-hidden border border-slate-200">
-                                    <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-slate-300" />
-                                    {iChg >= 0 ? (
-                                      <div 
-                                        className="absolute left-1/2 top-0 bottom-0 bg-red-500 rounded-r-xs"
-                                        style={{ width: `${Math.min((iChg / 10) * 50, 50)}%` }}
-                                      />
-                                    ) : (
-                                      <div 
-                                        className="absolute right-1/2 top-0 bottom-0 bg-green-500 rounded-l-xs"
-                                        style={{ width: `${Math.min((Math.abs(iChg) / 10) * 50, 50)}%` }}
-                                      />
-                                    )}
+                                {/* Institutional Change */}
+                                <div className="flex items-center gap-1 leading-none justify-between">
+                                  <div className="flex items-center gap-0.5 w-[54px] shrink-0">
+                                    <span className="text-[9px] text-slate-400 font-sans">五</span>
+                                    <Building2 className="w-2.5 h-2.5 text-red-500 shrink-0" />
+                                    <span className={`text-[8px] px-0.5 py-0.2 rounded-xs leading-normal font-sans font-bold text-center ${getChgBehaviorLabelAndStyle(iVal, iChg).style}`}>
+                                      {getChgBehaviorLabelAndStyle(iVal, iChg).label}
+                                    </span>
                                   </div>
-                                  <span className={`w-11 text-right font-mono font-bold shrink-0 text-[10px] ${iChg >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  <div className="flex-1 bg-slate-100 h-1 rounded-full relative overflow-hidden border border-slate-200/30">
+                                    <div 
+                                      className={`absolute top-0 bottom-0 ${iChg >= 0 ? 'left-1/2 bg-red-500' : 'right-1/2 bg-green-500'}`}
+                                      style={{ width: `${Math.min((Math.abs(iChg) / maxChangeLimit) * 50, 50)}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className={`font-mono text-[9px] w-12 text-right ${iChg >= 0 ? 'text-red-600' : 'text-green-600'} shrink-0`}>
                                     {iChg >= 0 ? '+' : ''}{iChg.toFixed(1)}
                                   </span>
                                 </div>
 
-                                {/* 零售 flow axis */}
-                                <div className="flex items-center gap-1">
-                                  <span className="w-8 flex items-center gap-0.5 shrink-0 text-slate-500 font-bold" title="偏零售席位"><span>散</span><Users className="w-3 h-3 text-slate-500" /></span>
-                                  <div className="flex-1 bg-slate-100 h-2 rounded-sm relative overflow-hidden border border-slate-200">
-                                    <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-slate-300" />
-                                    {rChg >= 0 ? (
-                                      <div 
-                                        className="absolute left-1/2 top-0 bottom-0 bg-red-500 rounded-r-xs"
-                                        style={{ width: `${Math.min((rChg / 10) * 50, 50)}%` }}
-                                      />
-                                    ) : (
-                                      <div 
-                                        className="absolute right-1/2 top-0 bottom-0 bg-green-500 rounded-l-xs"
-                                        style={{ width: `${Math.min((Math.abs(rChg) / 10) * 50, 50)}%` }}
-                                      />
-                                    )}
+                                {/* Retail Change */}
+                                <div className="flex items-center gap-1 leading-none justify-between">
+                                  <div className="flex items-center gap-0.5 w-[54px] shrink-0">
+                                    <span className="text-[9px] text-slate-400 font-sans">定</span>
+                                    <Users className="w-2.5 h-2.5 text-purple-500 shrink-0" />
+                                    <span className={`text-[8px] px-0.5 py-0.2 rounded-xs leading-normal font-sans font-bold text-center ${getChgBehaviorLabelAndStyle(rVal, rChg).style}`}>
+                                      {getChgBehaviorLabelAndStyle(rVal, rChg).label}
+                                    </span>
                                   </div>
-                                  <span className={`w-11 text-right font-mono font-bold shrink-0 text-[10px] ${rChg >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  <div className="flex-1 bg-slate-100 h-1 rounded-full relative overflow-hidden border border-slate-200/30">
+                                    <div 
+                                      className={`absolute top-0 bottom-0 ${rChg >= 0 ? 'left-1/2 bg-red-500' : 'right-1/2 bg-green-500'}`}
+                                      style={{ width: `${Math.min((Math.abs(rChg) / maxChangeLimit) * 50, 50)}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className={`font-mono text-[9px] w-12 text-right ${rChg >= 0 ? 'text-red-600' : 'text-green-600'} shrink-0`}>
                                     {rChg >= 0 ? '+' : ''}{rChg.toFixed(1)}
                                   </span>
                                 </div>
+
                               </div>
                             </td>
 
-                            {/* 重点关注 */}
+                            {/* 重点关注 (Formerly 强力关注) */}
                             <td className="p-3 text-center">
                               {isOriginalStrongSignal(c) ? (
                                 <div className="inline-flex items-center justify-center gap-1 relative">
                                   <span className="absolute -inset-1 bg-amber-400/20 blur-md rounded-full animate-ping"></span>
-                                  <span className="p-1 bg-amber-100 rounded-full text-amber-600 relative border border-amber-300 shadow-sm hover:scale-110 transition-transform cursor-help" title="双主力一致方向且零售持仓相反，触发重点关注！">
+                                  <span className="p-1 bg-amber-100 rounded-full text-amber-600 relative border border-amber-300 shadow-sm hover:scale-110 transition-transform cursor-help" title="双主力一致共振且偏零售席位方向相反，触发重点关注状态！">
                                     <Lightbulb className="w-3.5 h-3.5 fill-amber-500 animate-pulse text-amber-600" />
                                   </span>
                                 </div>
@@ -1421,9 +1505,30 @@ export default function App() {
                               )}
                             </td>
 
-                            {/* 一致性状态 */}
+                            {/* 一致性状态 (Retained, but displaying long/short/- according to custom user-configured signal rules) */}
                             <td className="p-3 text-center overflow-visible">
-                              <EvaluationBadge commodity={c} signalConfig={signalConfig} align="right" />
+                              {(() => {
+                                const sig = getCommodityCustomSignal(c, signalConfig);
+                                if (sig === 'long') {
+                                  return (
+                                    <span className="inline-flex items-center gap-0.5 bg-red-50 text-red-700 px-2 py-0.5 rounded-md font-sans font-extrabold text-[10px] border border-red-200 shadow-3xs">
+                                      <ArrowUpRight className="w-3 h-3 text-red-600 shrink-0" />
+                                      <span>偏多</span>
+                                    </span>
+                                  );
+                                } else if (sig === 'short') {
+                                  return (
+                                    <span className="inline-flex items-center gap-0.5 bg-green-50 text-green-700 px-2 py-0.5 rounded-md font-sans font-extrabold text-[10px] border border-green-200 shadow-3xs">
+                                      <ArrowDownRight className="w-3 h-3 text-green-600 shrink-0" />
+                                      <span>偏空</span>
+                                    </span>
+                                  );
+                                } else {
+                                  return (
+                                    <span className="text-slate-300 font-mono text-[10px]">—</span>
+                                  );
+                                }
+                              })()}
                             </td>
 
                           </tr>
@@ -1499,27 +1604,12 @@ export default function App() {
                           <th className="p-3 w-24 sticky left-12 bg-slate-50 z-40 border-r border-slate-200">品种名称</th>
                           <th className="p-3 w-24 sticky left-36 bg-slate-50 z-40 border-r-2 border-slate-300">主力合约</th>
                           <th className="p-3 w-40 text-center relative">
-                            <span>机构一致性</span>
+                            <span>三类席位一致性</span>
                             <span className="text-[9px] text-slate-400 block font-normal">鼠标悬停透视详细头寸</span>
                           </th>
-                          <th className="p-3 w-36">
-                            <div className="flex items-center gap-1">
-                              <Globe className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                              <span>偏外资持仓头寸</span>
-                            </div>
-                          </th>
-                          <th className="p-3 w-36">
-                            <div className="flex items-center gap-1">
-                              <Building2 className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                              <span>偏机构持仓头寸</span>
-                            </div>
-                          </th>
-                          <th className="p-3 w-36">
-                            <div className="flex items-center gap-1">
-                              <Users className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                              <span>偏零售持仓头寸</span>
-                            </div>
-                          </th>
+                          <th className="p-3 w-36">偏外资持仓</th>
+                          <th className="p-3 w-36">成交量前五持仓</th>
+                          <th className="p-3 w-36">用户自定义持仓</th>
                           <th className="p-3 w-[180px]">三类席位今日变化</th>
                           <th className="p-3 w-24 text-center">一致性状态</th>
                         </tr>
@@ -1585,45 +1675,28 @@ export default function App() {
 
                               {/* Visual Consistency Multi-Axis Axis Indicator */}
                               <td className="p-3 text-center relative overflow-visible bg-slate-50/20">
-                                <div className="w-full flex items-center justify-center h-6 relative">
-                                  {/* Thin background axis track */}
-                                  <div className="absolute left-2 right-2 h-0.5 bg-slate-200 top-1/2 -translate-y-1/2 rounded-full" />
-                                  
-                                  {/* Center 0 marker line */}
-                                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1px] h-3 bg-slate-400" />
-
-                                  {/* Thin consensus color bar */}
-                                  <div className="absolute left-2 right-2 h-1 top-1/2 -translate-y-1/2 relative overflow-visible">
-                                    {consensusSum < 0 ? (
+                                <div className="w-full flex items-center justify-between h-5 relative">
+                                  <div className="w-1/2 flex justify-end pr-1 border-r border-slate-300 h-full relative">
+                                    {consensusSum < 0 && (
                                       <div 
-                                        className={`absolute right-1/2 h-1 rounded-l-full bg-gradient-to-l ${
-                                          hasSameDirection ? 'from-green-500 to-green-300' : 'from-slate-400 to-slate-300'
+                                        className={`h-3.5 rounded-l-sm bg-gradient-to-l ${
+                                          hasSameDirection ? 'from-green-500 to-green-300' : 'from-slate-400 to-slate-200'
                                         }`}
-                                        style={{ width: `${Math.min((Math.abs(consensusSum) / (maxPositionLimit || 50)) * 50, 50)}%` }}
-                                      />
-                                    ) : (
-                                      <div 
-                                        className={`absolute left-1/2 h-1 rounded-r-full bg-gradient-to-r ${
-                                          hasSameDirection ? 'from-red-500 to-red-300' : 'from-slate-400 to-slate-300'
-                                        }`}
-                                        style={{ width: `${Math.min((consensusSum / (maxPositionLimit || 50)) * 50, 50)}%` }}
+                                        style={{ width: `${Math.min((Math.abs(consensusSum) / (maxPositionLimit || 50)) * 100, 100)}%` }}
                                       />
                                     )}
                                   </div>
-
-                                  {/* Foreign Dot (Blue) */}
-                                  <div 
-                                    className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-500 border border-white shadow-xs cursor-help transition-all duration-150 hover:scale-125 z-20"
-                                    style={{ left: `${50 + (fVal / (maxPositionLimit || 50)) * 50}%` }}
-                                    title={`偏外资持仓: ${formatFund(fVal)}`}
-                                  />
-
-                                  {/* Institutional Dot (Red) */}
-                                  <div 
-                                    className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-red-500 border border-white shadow-xs cursor-help transition-all duration-150 hover:scale-125 z-20"
-                                    style={{ left: `${50 + (iVal / (maxPositionLimit || 50)) * 50}%` }}
-                                    title={`偏机构持仓: ${formatFund(iVal)}`}
-                                  />
+                                  <div className="w-1/2 flex justify-start pl-1 h-full relative">
+                                    {consensusSum > 0 && (
+                                      <div 
+                                        className={`h-3.5 rounded-r-sm bg-gradient-to-r ${
+                                          hasSameDirection ? 'from-red-500 to-red-300' : 'from-slate-400 to-slate-200'
+                                        }`}
+                                        style={{ width: `${Math.min((consensusSum / (maxPositionLimit || 50)) * 100, 100)}%` }}
+                                      />
+                                    )}
+                                  </div>
+                                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-slate-400 z-10" />
                                 </div>
 
                                 {hoveredRowId === c.id && (
@@ -1635,15 +1708,11 @@ export default function App() {
                                         <span className={fVal >= 0 ? 'text-red-400' : 'text-green-400'}>{formatFund(fVal)}</span>
                                       </div>
                                       <div className="flex justify-between">
-                                        <span className="text-slate-400">偏机构累计净持:</span>
+                                        <span className="text-slate-400">成交量前五累计净持:</span>
                                         <span className={iVal >= 0 ? 'text-red-400' : 'text-green-400'}>{formatFund(iVal)}</span>
                                       </div>
-                                      <div className="flex justify-between border-t border-slate-800 pt-1">
-                                        <span className="text-slate-400">合计两类机构仓:</span>
-                                        <span className={consensusSum >= 0 ? 'text-red-400' : 'text-green-400'}>{formatFund(consensusSum)}</span>
-                                      </div>
                                       <div className="flex justify-between">
-                                        <span className="text-slate-400">散户逆向持仓:</span>
+                                        <span className="text-slate-400">用户自定义累计净持:</span>
                                         <span className={rVal >= 0 ? 'text-red-400' : 'text-green-400'}>{formatFund(rVal)}</span>
                                       </div>
                                     </div>
@@ -1684,74 +1753,17 @@ export default function App() {
                                 </div>
                               </td>
 
-                              {/* 三类席位今日变化 */}
-                              <td className="p-2 w-[180px] text-[10px] font-sans">
-                                <div className="space-y-1 flex flex-col justify-center h-full">
-                                  {/* 外资 flow axis */}
-                                  <div className="flex items-center gap-1">
-                                    <span className="w-8 flex items-center gap-0.5 shrink-0 text-slate-500 font-bold" title="偏外资席位"><span>外</span><Globe className="w-3 h-3 text-blue-500" /></span>
-                                    <div className="flex-1 bg-slate-100 h-2 rounded-sm relative overflow-hidden border border-slate-200">
-                                      <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-slate-300" />
-                                      {fChg >= 0 ? (
-                                        <div 
-                                          className="absolute left-1/2 top-0 bottom-0 bg-red-500 rounded-r-xs"
-                                          style={{ width: `${Math.min((fChg / 10) * 50, 50)}%` }}
-                                        />
-                                      ) : (
-                                        <div 
-                                          className="absolute right-1/2 top-0 bottom-0 bg-green-500 rounded-l-xs"
-                                          style={{ width: `${Math.min((Math.abs(fChg) / 10) * 50, 50)}%` }}
-                                        />
-                                      )}
-                                    </div>
-                                    <span className={`w-11 text-right font-mono font-bold shrink-0 text-[10px] ${fChg >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                      {fChg >= 0 ? '+' : ''}{fChg.toFixed(1)}
-                                    </span>
-                                  </div>
-
-                                  {/* 机构 flow axis */}
-                                  <div className="flex items-center gap-1">
-                                    <span className="w-8 flex items-center gap-0.5 shrink-0 text-slate-500 font-bold" title="偏机构席位"><span>机</span><Building2 className="w-3 h-3 text-red-500" /></span>
-                                    <div className="flex-1 bg-slate-100 h-2 rounded-sm relative overflow-hidden border border-slate-200">
-                                      <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-slate-300" />
-                                      {iChg >= 0 ? (
-                                        <div 
-                                          className="absolute left-1/2 top-0 bottom-0 bg-red-500 rounded-r-xs"
-                                          style={{ width: `${Math.min((iChg / 10) * 50, 50)}%` }}
-                                        />
-                                      ) : (
-                                        <div 
-                                          className="absolute right-1/2 top-0 bottom-0 bg-green-500 rounded-l-xs"
-                                          style={{ width: `${Math.min((Math.abs(iChg) / 10) * 50, 50)}%` }}
-                                        />
-                                      )}
-                                    </div>
-                                    <span className={`w-11 text-right font-mono font-bold shrink-0 text-[10px] ${iChg >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                      {iChg >= 0 ? '+' : ''}{iChg.toFixed(1)}
-                                    </span>
-                                  </div>
-
-                                  {/* 零售 flow axis */}
-                                  <div className="flex items-center gap-1">
-                                    <span className="w-8 flex items-center gap-0.5 shrink-0 text-slate-500 font-bold" title="偏零售席位"><span>散</span><Users className="w-3 h-3 text-slate-500" /></span>
-                                    <div className="flex-1 bg-slate-100 h-2 rounded-sm relative overflow-hidden border border-slate-200">
-                                      <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-slate-300" />
-                                      {rChg >= 0 ? (
-                                        <div 
-                                          className="absolute left-1/2 top-0 bottom-0 bg-red-500 rounded-r-xs"
-                                          style={{ width: `${Math.min((rChg / 10) * 50, 50)}%` }}
-                                        />
-                                      ) : (
-                                        <div 
-                                          className="absolute right-1/2 top-0 bottom-0 bg-green-500 rounded-l-xs"
-                                          style={{ width: `${Math.min((Math.abs(rChg) / 10) * 50, 50)}%` }}
-                                        />
-                                      )}
-                                    </div>
-                                    <span className={`w-11 text-right font-mono font-bold shrink-0 text-[10px] ${rChg >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                      {rChg >= 0 ? '+' : ''}{rChg.toFixed(1)}
-                                    </span>
-                                  </div>
+                              <td className="p-3 font-mono">
+                                <div className="flex items-center gap-1">
+                                  <span className={`text-[9px] px-1 rounded-xs scale-90 ${getBehavior(fVal, fChg).bg}`} title={`偏外资: ${getBehavior(fVal, fChg).label}`}>
+                                    外:{getBehavior(fVal, fChg).label}
+                                  </span>
+                                  <span className={`text-[9px] px-1 rounded-xs scale-90 ${getBehavior(iVal, iChg).bg}`} title={`成交量前五: ${getBehavior(iVal, iChg).label}`}>
+                                    五:{getBehavior(iVal, iChg).label}
+                                  </span>
+                                  <span className={`text-[9px] px-1 rounded-xs scale-90 ${getBehavior(rVal, rChg).bg}`} title={`用户自定义: ${getBehavior(rVal, rChg).label}`}>
+                                    定:{getBehavior(rVal, rChg).label}
+                                  </span>
                                 </div>
                               </td>
 
@@ -1787,6 +1799,10 @@ export default function App() {
                   commodities={compareMode === 'multi' ? selectedCommoditiesList : rawCommodities} 
                   onSignalFilter={setActiveFilter}
                   activeFilter={activeFilter}
+                  onNavigateToFilter={(seatType) => {
+                    setFocusedSeatType(seatType);
+                    setViewMode('companyFilter');
+                  }}
                   signalConfig={signalConfig}
                 />
 
@@ -2079,6 +2095,7 @@ export default function App() {
 
         </div>
       </div>
+      )}
 
       {/* PLATFORM FOOTER & LEGAL DISCLAIMER */}
       <footer className="border-t border-slate-200 bg-white mt-12 py-8 text-xs text-slate-500 font-sans leading-relaxed">

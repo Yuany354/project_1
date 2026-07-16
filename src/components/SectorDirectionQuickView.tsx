@@ -129,14 +129,14 @@ export default function SectorDirectionQuickView({
                 </div>
                 {/* Institutional */}
                 <div>
-                  <span className="text-slate-400 block mb-0.5 scale-90 origin-left">机构净额</span>
+                  <span className="text-slate-400 block mb-0.5 scale-90 origin-left">成交量前五净额</span>
                   <span className={`font-mono font-bold ${sec.sumInstitutional >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                     {formatFund(sec.sumInstitutional)}亿
                   </span>
                 </div>
                 {/* Retail */}
                 <div>
-                  <span className="text-slate-400 block mb-0.5 scale-90 origin-left">零售净额</span>
+                  <span className="text-slate-400 block mb-0.5 scale-90 origin-left">自定义净额</span>
                   <span className={`font-mono font-bold ${sec.sumRetail >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                     {formatFund(sec.sumRetail)}亿
                   </span>
