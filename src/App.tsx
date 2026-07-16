@@ -60,14 +60,24 @@ import {
 export default function App() {
   // States
   const [viewMode, setViewMode] = useState<'main' | 'companyFilter'>('main');
-  const [focusedSeatType, setFocusedSeatType] = useState<'foreign' | 'institutional' | 'retail'>('foreign');
-  const [selectedCompanies, setSelectedCompanies] = useState<Record<string, Record<'foreign' | 'institutional' | 'retail', string[]>>>({
+  const [focusedSeatType, setFocusedSeatType] = useState<'foreign' | 'institutional' | 'custom1' | 'custom2' | 'custom3'>('custom1');
+  const [selectedCompanies, setSelectedCompanies] = useState<Record<string, Record<'foreign' | 'institutional' | 'custom1' | 'custom2' | 'custom3', string[]>>>({
     global: {
       foreign: ['摩根大通期货', '乾坤期货', '瑞银证券', '高盛工银期货', '汇丰前海证券', '野村东方国际'],
       institutional: ['国泰君安期货', '中信期货', '永安期货', '东证期货', '华泰期货'],
-      retail: ['银河期货', '广发期货', '浙商期货']
+      custom1: ['银河期货', '广发期货', '浙商期货'],
+      custom2: ['申银万国期货', '东方财富期货', '中原期货'],
+      custom3: ['平安证券期货', '国信期货', '徽商期货']
     }
   });
+
+  const [customSeatNames, setCustomSeatNames] = useState<Record<'custom1' | 'custom2' | 'custom3', string>>({
+    custom1: '用户自定义席位一',
+    custom2: '用户自定义席位二',
+    custom3: '用户自定义席位三'
+  });
+
+  const [selectedCustomSeatId, setSelectedCustomSeatId] = useState<'custom1' | 'custom2' | 'custom3'>('custom1');
 
   const [signalConfig, setSignalConfig] = useState<SignalConfig>(DEFAULT_SIGNAL_CONFIG);
   const [signalConfigTab, setSignalConfigTab] = useState<'long' | 'short'>('long');
@@ -140,6 +150,35 @@ export default function App() {
     localStorage.setItem('qd_futures_favorites', JSON.stringify(favorites));
   }, [favorites]);
 
+  // Master broker multipliers to simulate realistic dynamic capital & position calculations
+  const BROKER_MULTIPLIERS: Record<string, number> = useMemo(() => ({
+    // Foreign
+    '摩根大通期货': 1.25,
+    '乾坤期货': 1.05,
+    '瑞银证券': 0.85,
+    '高盛工银期货': 1.15,
+    '汇丰前海证券': 0.95,
+    '野村东方国际': 0.75,
+    
+    // Institutional
+    '国泰君安期货': 1.35,
+    '中信期货': 1.45,
+    '永安期货': 1.25,
+    '东证期货': 1.15,
+    '华泰期货': 0.95,
+    
+    // Custom / Retail
+    '银河期货': 1.20,
+    '广发期货': 0.90,
+    '浙商期货': 1.10,
+    '申银万国期货': 1.05,
+    '东方财富期货': 1.40,
+    '中原期货': 0.65,
+    '平安证券期货': 0.80,
+    '国信期货': 1.00,
+    '徽商期货': 0.70
+  }), []);
+
   // Get raw commodities for selected date with dynamic seat configurations applied
   const rawCommodities = useMemo(() => {
     const base = COMMODITIES_BY_DATE[effectiveDate] || COMMODITIES_BY_DATE["2026.06.29"];
@@ -148,9 +187,12 @@ export default function App() {
       // Resolve configuration for this specific variety; fallback to global
       const config = selectedCompanies[item.id] || selectedCompanies.global;
       
-      const foreignWeight = (config.foreign?.length || 0) / 6;
-      const institutionalWeight = (config.institutional?.length || 0) / 5;
-      const retailWeight = (config.retail?.length || 0) / 3;
+      const foreignWeight = (config.foreign || []).reduce((sum, name) => sum + (BROKER_MULTIPLIERS[name] || 1.0), 0) / 6.0;
+      const institutionalWeight = (config.institutional || []).reduce((sum, name) => sum + (BROKER_MULTIPLIERS[name] || 1.0), 0) / 6.15;
+      
+      // Look up companies for the currently active custom seat
+      const activeCustomCompanies = config[selectedCustomSeatId] || [];
+      const retailWeight = activeCustomCompanies.reduce((sum, name) => sum + (BROKER_MULTIPLIERS[name] || 1.0), 0) / 3.20;
 
       return {
         ...item,
@@ -166,7 +208,7 @@ export default function App() {
         }
       };
     });
-  }, [effectiveDate, selectedCompanies]);
+  }, [effectiveDate, selectedCompanies, selectedCustomSeatId, BROKER_MULTIPLIERS]);
 
   // Selected commodities for view/compare (single vs multiple)
   const [selectedCommodityIds, setSelectedCommodityIds] = useState<string[]>(['ZN']);
@@ -549,6 +591,10 @@ export default function App() {
           selectedCompanies={selectedCompanies}
           onUpdateCompanies={setSelectedCompanies}
           commodities={rawCommodities.map(c => ({ id: c.id, name: c.name }))}
+          customSeatNames={customSeatNames}
+          onUpdateSeatNames={setCustomSeatNames}
+          selectedCustomSeatId={selectedCustomSeatId}
+          onSelectCustomSeat={setSelectedCustomSeatId}
         />
       ) : (
         <div className="w-full max-w-[1750px] mx-auto px-4 py-6">
@@ -1114,6 +1160,11 @@ export default function App() {
                       setViewMode('companyFilter');
                     }}
                     signalConfig={signalConfig}
+                    selectedCompanies={selectedCompanies}
+                    customSeatNames={customSeatNames}
+                    selectedCustomSeatId={selectedCustomSeatId}
+                    onSelectCustomSeat={setSelectedCustomSeatId}
+                    activeVariety={compareMode === 'single' ? (selectedCommodity?.id || 'global') : 'global'}
                   />
                 </div>
 
@@ -1804,6 +1855,11 @@ export default function App() {
                     setViewMode('companyFilter');
                   }}
                   signalConfig={signalConfig}
+                  customSeatNames={customSeatNames}
+                  selectedCustomSeatId={selectedCustomSeatId}
+                  onSelectCustomSeat={setSelectedCustomSeatId}
+                  selectedCompanies={selectedCompanies}
+                  activeVariety="global"
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

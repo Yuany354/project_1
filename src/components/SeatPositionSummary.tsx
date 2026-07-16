@@ -12,10 +12,13 @@ interface SeatPositionSummaryProps {
   commodities: Commodity[];
   onSignalFilter: (filterType: 'all' | 'long' | 'short' | null) => void;
   activeFilter: 'all' | 'long' | 'short' | null;
-  onNavigateToFilter?: (seatType: 'foreign' | 'institutional' | 'retail') => void;
+  onNavigateToFilter?: (seatType: 'foreign' | 'institutional' | 'custom1' | 'custom2' | 'custom3') => void;
   signalConfig: SignalConfig;
-  selectedCompanies?: Record<string, Record<'foreign' | 'institutional' | 'retail', string[]>>;
+  selectedCompanies?: Record<string, Record<'foreign' | 'institutional' | 'custom1' | 'custom2' | 'custom3', string[]>>;
   activeVariety?: string;
+  customSeatNames?: Record<'custom1' | 'custom2' | 'custom3', string>;
+  selectedCustomSeatId?: 'custom1' | 'custom2' | 'custom3';
+  onSelectCustomSeat?: (id: 'custom1' | 'custom2' | 'custom3') => void;
 }
 
 export default function SeatPositionSummary({
@@ -25,18 +28,29 @@ export default function SeatPositionSummary({
   onNavigateToFilter,
   signalConfig,
   selectedCompanies,
-  activeVariety = 'global'
+  activeVariety = 'global',
+  customSeatNames = {
+    custom1: '用户自定义席位一',
+    custom2: '用户自定义席位二',
+    custom3: '用户自定义席位三'
+  },
+  selectedCustomSeatId = 'custom1',
+  onSelectCustomSeat
 }: SeatPositionSummaryProps) {
   // Extract active company listings based on state or defaults
-  const currentConfig = selectedCompanies?.[activeVariety] || selectedCompanies?.global || {
+  const currentConfig = (selectedCompanies?.[activeVariety] || selectedCompanies?.global || {
     foreign: ['摩根大通期货', '乾坤期货', '瑞银证券', '高盛工银期货', '汇丰前海证券', '野村东方国际'],
     institutional: ['国泰君安期货', '中信期货', '永安期货', '东证期货', '华泰期货'],
-    retail: ['银河期货', '广发期货', '浙商期货']
-  };
+    custom1: ['银河期货', '广发期货', '浙商期货'],
+    custom2: ['申银万国期货', '东方财富期货', '中原期货'],
+    custom3: ['平安证券期货', '国信期货', '徽商期货']
+  }) as any;
 
   const foreignCompanies = currentConfig.foreign || [];
   const top5Companies = currentConfig.institutional || [];
-  const customCompanies = currentConfig.retail || [];
+  const activeCustomId = selectedCustomSeatId || 'custom1';
+  const customCompanies = currentConfig[activeCustomId] || [];
+  const activeCustomSeatName = customSeatNames[activeCustomId] || '用户自定义席位';
 
   // Filter commodities based on custom signal configuration
   const filteredCommoditiesForSummary = activeFilter
@@ -217,7 +231,7 @@ export default function SeatPositionSummary({
           </div>
         </div>
 
-        {/* Retail Card (Renamed to 用户自定义席位) */}
+        {/* Retail Card (Renamed to 用户自定义席位 and updated with select options) */}
         <div 
           id="summary-card-retail"
           className="group relative bg-white rounded-lg p-4 border border-slate-200 border-l-4 border-l-purple-500 shadow-sm hover:shadow-md transition-all duration-200"
@@ -225,35 +239,48 @@ export default function SeatPositionSummary({
           {/* Hover calculation tooltip popover */}
           <div className="absolute left-0 right-0 bottom-full mb-2 hidden group-hover:block z-50 bg-slate-900 text-slate-100 p-3 rounded shadow-xl text-[11px] leading-relaxed max-w-xs mx-auto border border-slate-700">
             <div className="font-bold text-purple-400 mb-1">用户自定义席位结算口径：</div>
-            <p className="text-slate-300 mb-1.5">用户自定义筛选指定的席位公司持仓数据。未进行筛选前默认随便勾选三家代表公司。</p>
-            <div className="font-bold text-purple-400 mt-2 mb-1">当前自定义勾选公司:</div>
+            <p className="text-slate-300 mb-1.5">用户自定义筛选指定的席位公司持仓数据。默认各分类提供3家代表公司，可任意勾选并编辑分类名称。</p>
+            <div className="font-bold text-purple-400 mt-2 mb-1">当前该分类勾选公司:</div>
             <div className="text-slate-200 leading-normal bg-slate-850 p-1.5 rounded border border-slate-700/50 max-h-[100px] overflow-y-auto font-sans">
               {customCompanies.length > 0 ? customCompanies.join('、') : '暂无'}
             </div>
           </div>
 
           <div className="flex items-center justify-between text-slate-500 mb-1.5">
-            <div>
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                用户自定义席位
-                <HelpCircle className="w-3 h-3 text-slate-400 cursor-pointer" />
+            <div className="flex-1 min-w-0">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span className="truncate">用户自定义席位</span>
+                <HelpCircle className="w-3 h-3 text-slate-400 cursor-pointer shrink-0" />
               </span>
-              <span className="text-[10px] text-slate-400 block font-mono">USER CUSTOM SEATS (用户自定过滤席位)</span>
+              <span className="text-[10px] text-slate-400 block font-mono truncate">USER CUSTOM SEATS (用户自定义席位)</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="relative group/cfg">
+              {/* Custom Category Dropdown selector */}
+              <select
+                value={activeCustomId}
+                onChange={(e) => onSelectCustomSeat?.(e.target.value as 'custom1' | 'custom2' | 'custom3')}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-black rounded px-1.5 py-0.5 border border-purple-200 focus:outline-none cursor-pointer transition-colors max-w-[120px]"
+                title="选择在主页面呈现的自定义分类"
+              >
+                <option value="custom1">🎯 {customSeatNames.custom1}</option>
+                <option value="custom2">🎯 {customSeatNames.custom2}</option>
+                <option value="custom3">🎯 {customSeatNames.custom3}</option>
+              </select>
+
+              <div className="relative group/cfg shrink-0">
                 <button 
                   className="p-1 hover:bg-slate-100 rounded transition-colors cursor-pointer"
                   title="配置自定义席位公司"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (onNavigateToFilter) onNavigateToFilter('retail');
+                    if (onNavigateToFilter) onNavigateToFilter(activeCustomId);
                   }}
                 >
                   <Users className="w-4 h-4 text-purple-500" />
                 </button>
                 <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover/cfg:block bg-slate-950 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap z-50 font-sans pointer-events-none">
-                  配置自定义席位
+                  配置此席位
                 </div>
               </div>
             </div>

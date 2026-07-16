@@ -26,7 +26,7 @@ export interface Commodity {
   description: string;   // 品种信息描述 (例如 "有色金属 · DMF口径")
 }
 
-export type SeatType = 'foreign' | 'institutional' | 'retail';
+export type SeatType = 'foreign' | 'institutional' | 'retail' | 'custom1' | 'custom2' | 'custom3';
 
 export interface SectorSummary {
   name: string;

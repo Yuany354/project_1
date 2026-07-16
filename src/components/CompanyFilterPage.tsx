@@ -13,10 +13,14 @@ import { SeatType } from '../types';
 
 interface CompanyFilterPageProps {
   onBack: () => void;
-  initialSeatType?: SeatType;
-  selectedCompanies: Record<string, Record<SeatType, string[]>>;
-  onUpdateCompanies: (newConfig: Record<string, Record<SeatType, string[]>>) => void;
+  initialSeatType?: 'foreign' | 'institutional' | 'custom1' | 'custom2' | 'custom3';
+  selectedCompanies: Record<string, Record<'foreign' | 'institutional' | 'custom1' | 'custom2' | 'custom3', string[]>>;
+  onUpdateCompanies: (newConfig: Record<string, Record<'foreign' | 'institutional' | 'custom1' | 'custom2' | 'custom3', string[]>>) => void;
   commodities: { id: string; name: string }[];
+  customSeatNames: Record<'custom1' | 'custom2' | 'custom3', string>;
+  onUpdateSeatNames: (newNames: Record<'custom1' | 'custom2' | 'custom3', string>) => void;
+  selectedCustomSeatId?: 'custom1' | 'custom2' | 'custom3';
+  onSelectCustomSeat?: (id: 'custom1' | 'custom2' | 'custom3') => void;
 }
 
 // Master list of top Chinese futures member companies / brokers
@@ -48,38 +52,56 @@ const ALL_AVAILABLE_COMPANIES = [
   { name: '徽商期货', code: 'HUISHANG', category: 'retail', desc: '中部地区活跃零售大单聚集席位' }
 ];
 
-const DEFAULT_PRESETS: Record<SeatType, string[]> = {
+const DEFAULT_PRESETS: Record<'foreign' | 'institutional' | 'custom1' | 'custom2' | 'custom3', string[]> = {
   foreign: ['摩根大通期货', '乾坤期货', '瑞银证券', '高盛工银期货', '汇丰前海证券', '野村东方国际'],
   institutional: ['国泰君安期货', '中信期货', '永安期货', '东证期货', '华泰期货'],
-  retail: ['银河期货', '广发期货', '浙商期货'] // Defaults to 3 pre-selected custom companies with zero overlap!
+  custom1: ['银河期货', '广发期货', '浙商期货'],
+  custom2: ['申银万国期货', '东方财富期货', '中原期货'],
+  custom3: ['平安证券期货', '国信期货', '徽商期货']
 };
 
 export default function CompanyFilterPage({
   onBack,
-  initialSeatType = 'retail',
+  initialSeatType = 'custom1',
   selectedCompanies,
   onUpdateCompanies,
-  commodities
+  commodities,
+  customSeatNames,
+  onUpdateSeatNames,
+  selectedCustomSeatId = 'custom1',
+  onSelectCustomSeat
 }: CompanyFilterPageProps) {
-  // Always lock seat type to retail (custom seat) as requested by the user
-  const [activeSeat] = useState<SeatType>('retail');
+  // Always lock active edit seat to one of the custom seats
+  const [activeSeat, setActiveSeat] = useState<'custom1' | 'custom2' | 'custom3'>(() => {
+    if (initialSeatType && ['custom1', 'custom2', 'custom3'].includes(initialSeatType)) {
+      return initialSeatType as 'custom1' | 'custom2' | 'custom3';
+    }
+    return 'custom1';
+  });
+  
   const [activeVariety, setActiveVariety] = useState<string>('global'); // 'global' or commodityId
   const [searchQuery, setSearchQuery] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   // Local state to modify before saving
-  const [localConfig, setLocalConfig] = useState<Record<string, Record<SeatType, string[]>>>(() => {
-    const copy: Record<string, Record<SeatType, string[]>> = {};
+  const [localConfig, setLocalConfig] = useState<Record<string, Record<'foreign' | 'institutional' | 'custom1' | 'custom2' | 'custom3', string[]>>>(() => {
+    const copy: Record<string, Record<'foreign' | 'institutional' | 'custom1' | 'custom2' | 'custom3', string[]>> = {};
     Object.keys(selectedCompanies).forEach(key => {
       copy[key] = {
         foreign: [...selectedCompanies[key].foreign],
         institutional: [...selectedCompanies[key].institutional],
-        retail: [...selectedCompanies[key].retail]
+        custom1: [...(selectedCompanies[key].custom1 || [])],
+        custom2: [...(selectedCompanies[key].custom2 || [])],
+        custom3: [...(selectedCompanies[key].custom3 || [])]
       };
     });
     return copy;
   });
+
+  const [localSeatNames, setLocalSeatNames] = useState<Record<'custom1' | 'custom2' | 'custom3', string>>(() => ({
+    ...customSeatNames
+  }));
 
   // Active config resolved for the active variety (fallback to global on edit)
   const activeVarietyConfig = useMemo(() => {
@@ -87,7 +109,9 @@ export default function CompanyFilterPage({
       return {
         foreign: [...localConfig.global.foreign],
         institutional: [...localConfig.global.institutional],
-        retail: [...localConfig.global.retail]
+        custom1: [...localConfig.global.custom1],
+        custom2: [...localConfig.global.custom2],
+        custom3: [...localConfig.global.custom3]
       };
     }
     return localConfig[activeVariety];
@@ -111,20 +135,16 @@ export default function CompanyFilterPage({
   };
 
   const handleToggleCompany = (companyName: string) => {
-    // Prevent modifying foreign or institutional preset lists directly if they are locked/system-managed
-    if (activeSeat === 'foreign' || activeSeat === 'institutional') {
-      triggerToast('偏外资及成交量前五会员为系统默认硬核席位，当前已被锁定。可自由筛选下方用户自定义席位。');
-      return;
-    }
-
     setLocalConfig(prev => {
       const varietyConfig = prev[activeVariety] ? { ...prev[activeVariety] } : {
         foreign: [...prev.global.foreign],
         institutional: [...prev.global.institutional],
-        retail: [...prev.global.retail]
+        custom1: [...prev.global.custom1],
+        custom2: [...prev.global.custom2],
+        custom3: [...prev.global.custom3]
       };
       
-      const currentList = varietyConfig[activeSeat];
+      const currentList = varietyConfig[activeSeat] || [];
       let newList: string[];
       if (currentList.includes(companyName)) {
         // Enforce at least 1 checked company constraint for custom seat
@@ -154,10 +174,17 @@ export default function CompanyFilterPage({
         global: {
           foreign: [...DEFAULT_PRESETS.foreign],
           institutional: [...DEFAULT_PRESETS.institutional],
-          retail: [...DEFAULT_PRESETS.retail]
+          custom1: [...DEFAULT_PRESETS.custom1],
+          custom2: [...DEFAULT_PRESETS.custom2],
+          custom3: [...DEFAULT_PRESETS.custom3]
         }
       }));
-      triggerToast('已重置全局席位公司配置为系统合规默认预设（自定义席位预置3家公司）');
+      setLocalSeatNames({
+        custom1: '用户自定义席位一',
+        custom2: '用户自定义席位二',
+        custom3: '用户自定义席位三'
+      });
+      triggerToast('已重置全局席位公司配置及名称为默认预设');
     } else {
       setLocalConfig(prev => {
         const next = { ...prev };
@@ -170,16 +197,13 @@ export default function CompanyFilterPage({
   };
 
   const handleClearAll = () => {
-    if (activeSeat === 'foreign' || activeSeat === 'institutional') {
-      triggerToast('核心预设席位不可被清空。');
-      return;
-    }
-
     setLocalConfig(prev => {
       const varietyConfig = prev[activeVariety] ? { ...prev[activeVariety] } : {
         foreign: [...prev.global.foreign],
         institutional: [...prev.global.institutional],
-        retail: [...prev.global.retail]
+        custom1: [...prev.global.custom1],
+        custom2: [...prev.global.custom2],
+        custom3: [...prev.global.custom3]
       };
       
       return {
@@ -195,25 +219,29 @@ export default function CompanyFilterPage({
 
   const handleSave = () => {
     onUpdateCompanies(localConfig);
-    triggerToast('持仓席位会员过滤规则已成功应用，透视指标已重新计算');
+    onUpdateSeatNames(localSeatNames);
+    triggerToast('持仓席位会员过滤规则及分类名称已成功应用，透视指标已重新计算');
     setTimeout(() => {
       onBack();
     }, 1000);
   };
 
-  const getSeatIcon = (type: SeatType) => {
+  const getSeatIcon = (type: string) => {
     switch (type) {
       case 'foreign': return <Globe className="w-5 h-5 text-amber-500" />;
       case 'institutional': return <Building2 className="w-5 h-5 text-red-500" />;
-      case 'retail': return <Users className="w-5 h-5 text-blue-600" />;
+      default: return <Users className="w-5 h-5 text-purple-600" />;
     }
   };
 
-  const getSeatLabel = (type: SeatType) => {
+  const getSeatLabel = (type: string) => {
     switch (type) {
       case 'foreign': return '偏外资席位 (FOREIGN SEATS)';
       case 'institutional': return '成交量前五会员 (TOP 5 VOLUME)';
-      case 'retail': return '用户自定义席位 (USER CUSTOM)';
+      case 'custom1': return localSeatNames.custom1;
+      case 'custom2': return localSeatNames.custom2;
+      case 'custom3': return localSeatNames.custom3;
+      default: return '用户自定义席位';
     }
   };
 
@@ -389,47 +417,104 @@ export default function CompanyFilterPage({
                 </div>
               </div>
 
-              {/* Editable Custom Retail Card */}
-              <div className="p-3.5 bg-purple-50/40 border border-purple-200 rounded-xl shadow-3xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4.5 h-4.5 text-purple-600 animate-pulse" />
-                    <span className="text-xs font-black text-slate-900">用户自定义席位</span>
-                  </div>
-                  <span className="text-[9px] bg-purple-600 text-white px-1.5 py-0.2 rounded font-sans font-bold">✨ 当前配置中</span>
-                </div>
-                <p className="text-[10px] text-slate-400 leading-normal">可于右侧备选池中任意勾选或检索符合分析要求的特定期货公司。</p>
-              </div>
+              {/* Editable Custom Retail Card - Replaced with three customizable categories */}
+              <div className="space-y-3 pt-1 border-t border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 block uppercase">点击切换配置目标 (可编辑名称)：</span>
+                {(['custom1', 'custom2', 'custom3'] as const).map(seatId => {
+                  const isActive = activeSeat === seatId;
+                  const seatName = localSeatNames[seatId];
+                  const seatComps = activeVarietyConfig[seatId] || [];
 
-            </div>
-
-            {/* SEAT INFLUENCE SUMMARY */}
-            <div className="border-t border-slate-100 pt-4 mt-2 space-y-3">
-              <span className="text-xs font-bold text-slate-500 block">当前已选自定义代表公司</span>
-              <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-                <span className="text-[10px] text-slate-400 font-mono uppercase block mb-1">自定义代表公司 ({activeVarietyConfig.retail?.length || 0}家)</span>
-                {(!activeVarietyConfig.retail || activeVarietyConfig.retail.length === 0) ? (
-                  <span className="text-xs text-slate-400 italic block py-2">暂无代表公司，统计时将忽略此项</span>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1 py-1">
-                    {activeVarietyConfig.retail.map((name) => (
-                      <span 
-                        key={name}
-                        className="bg-white border border-slate-200 rounded text-slate-700 text-[10px] pl-2 pr-1 py-0.5 flex items-center gap-1.5 font-bold shadow-2xs"
-                      >
-                        {name}
-                        <button 
-                          onClick={() => handleToggleCompany(name)}
-                          className="text-slate-400 hover:text-red-500 transition-colors p-0.5 cursor-pointer"
-                          title="移除"
+                  return (
+                    <div
+                      key={seatId}
+                      onClick={() => setActiveSeat(seatId)}
+                      className={`p-3 rounded-xl border transition-all cursor-pointer relative ${
+                        isActive
+                          ? 'bg-purple-50/50 border-purple-300 shadow-3xs'
+                          : 'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <Users className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-purple-600' : 'text-slate-400'}`} />
+                          <input
+                            type="text"
+                            value={seatName}
+                            onClick={(e) => e.stopPropagation()} // prevent switching tab on input click
+                            onChange={(e) => {
+                              setLocalSeatNames(prev => ({
+                                ...prev,
+                                [seatId]: e.target.value
+                              }));
+                            }}
+                            className="bg-transparent border-b border-dashed border-slate-300 focus:border-purple-500 focus:outline-none text-xs font-bold text-slate-800 py-0.5 px-0.5 min-w-0 flex-1 font-sans"
+                            placeholder="自定义分类名称"
+                            title="点击可直接编辑分类名称"
+                          />
+                        </div>
+                        {isActive ? (
+                          <span className="text-[8px] bg-purple-600 text-white px-1.5 py-0.2 rounded font-sans font-bold shrink-0">
+                            正在配置
+                          </span>
+                        ) : (
+                          <span className="text-[8px] bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-sans font-medium shrink-0">
+                            点击配置
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-1.5 max-h-24 overflow-y-auto pr-0.5">
+                        {seatComps.length === 0 ? (
+                          <span className="text-[9px] text-slate-400 italic py-0.5">未选代表公司 (在右侧勾选)</span>
+                        ) : (
+                          seatComps.map(name => (
+                            <span
+                              key={name}
+                              className={`text-[9px] px-1.5 py-0.5 rounded font-medium flex items-center gap-0.5 border ${
+                                isActive
+                                  ? 'bg-white border-purple-200 text-purple-700'
+                                  : 'bg-slate-50 border-slate-100 text-slate-500'
+                              }`}
+                            >
+                              {name}
+                              {isActive && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleCompany(name);
+                                  }}
+                                  className="text-purple-400 hover:text-red-500 transition-colors p-0.5 cursor-pointer"
+                                  title="点击快速移除"
+                                >
+                                  <Trash2 className="w-2.5 h-2.5" />
+                                </button>
+                              )}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-dashed border-slate-150">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectCustomSeat?.(seatId);
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded-md font-sans font-bold transition-all ${
+                            selectedCustomSeatId === seatId
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                              : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700 border border-slate-200'
+                          }`}
+                          title="选择该席位分类展示在主界面的「用户自定义席位」摘要卡片中"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          {selectedCustomSeatId === seatId ? '★ 当前主页呈现' : '☆ 设为呈现席位'}
                         </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+
             </div>
           </div>
 
@@ -473,11 +558,19 @@ export default function CompanyFilterPage({
                 filteredAvailableCompanies.map((comp) => {
                   const isChecked = activeVarietyConfig[activeSeat]?.includes(comp.name) || false;
                   
-                  // Let's check if this company is currently configured in another seat
-                  let assignedSeat: SeatType | null = null;
-                  if (activeSeat !== 'foreign' && activeVarietyConfig.foreign?.includes(comp.name)) assignedSeat = 'foreign';
-                  if (activeSeat !== 'institutional' && activeVarietyConfig.institutional?.includes(comp.name)) assignedSeat = 'institutional';
-                  if (activeSeat !== 'retail' && activeVarietyConfig.retail?.includes(comp.name)) assignedSeat = 'retail';
+                  // Check if this company is currently configured in another seat
+                  let assignedSeat: string | null = null;
+                  if (activeVarietyConfig.foreign?.includes(comp.name)) assignedSeat = 'foreign';
+                  else if (activeVarietyConfig.institutional?.includes(comp.name)) assignedSeat = 'institutional';
+                  else {
+                    const otherCustoms = (['custom1', 'custom2', 'custom3'] as const).filter(id => id !== activeSeat);
+                    for (const id of otherCustoms) {
+                      if (activeVarietyConfig[id]?.includes(comp.name)) {
+                        assignedSeat = id;
+                        break;
+                      }
+                    }
+                  }
 
                   return (
                     <div
@@ -511,7 +604,13 @@ export default function CompanyFilterPage({
                         {assignedSeat && (
                           <span className="inline-flex items-center gap-1 text-[8px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 mt-1.5">
                             <Info className="w-2.5 h-2.5" />
-                            <span>已被划分在「{assignedSeat === 'foreign' ? '偏外资' : assignedSeat === 'institutional' ? '成交量前五会员' : '用户自定义'}」席位中</span>
+                            <span>已被划分在「{
+                              assignedSeat === 'foreign' 
+                                ? '偏外资' 
+                                : assignedSeat === 'institutional' 
+                                  ? '成交量前五会员' 
+                                  : localSeatNames[assignedSeat as 'custom1' | 'custom2' | 'custom3']
+                            }」席位中</span>
                           </span>
                         )}
                       </div>
