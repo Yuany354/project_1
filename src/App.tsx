@@ -477,7 +477,7 @@ export default function App() {
       
       {/* LEVEL 1: CORPORATE TOP BAR (Guotai Junan Futures style - Light Theme) */}
       <header className="bg-white text-slate-800 border-b border-slate-200 px-4 py-3 shadow-xs">
-        <div className="w-full max-w-[1750px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="w-full max-w-none px-4 md:px-6 mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           
           {/* Logo & Corporate Title */}
           <div className="flex items-center gap-4">
@@ -552,7 +552,7 @@ export default function App() {
 
       {/* LEVEL 2: SECONDARY PLATFORM TAB MENU (Subheaders as seen in screenshot) */}
       <div className="bg-white border-b border-slate-200 py-2.5 shadow-sm px-4">
-        <div className="w-full max-w-[1750px] mx-auto flex flex-wrap items-center justify-between gap-3">
+        <div className="w-full max-w-none px-4 md:px-6 mx-auto flex flex-wrap items-center justify-between gap-3">
           
           {/* Left: Interactive Tab Buttons */}
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 font-medium">
@@ -619,7 +619,7 @@ export default function App() {
           onSelectCustomSeat={setSelectedCustomSeatId}
         />
       ) : (
-        <div className="w-full max-w-[1750px] mx-auto px-4 py-6">
+        <div className="w-full max-w-none px-4 md:px-6 py-6">
         <div className="flex flex-col lg:flex-row gap-6 items-start">
           
           {/* SIDEBAR 1: 持仓透视 MENU (Width-64, sticky, elegant light theme matching the red boxed region in user image) */}
@@ -2169,7 +2169,7 @@ export default function App() {
 
       {/* PLATFORM FOOTER & LEGAL DISCLAIMER */}
       <footer className="border-t border-slate-200 bg-white mt-12 py-8 text-xs text-slate-500 font-sans leading-relaxed">
-        <div className="w-full max-w-[1750px] mx-auto px-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="w-full max-w-none px-4 md:px-6 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <p className="font-bold text-slate-700 mb-1">国泰君安期货机构服务说明</p>
             <p>
