@@ -1018,14 +1018,14 @@ export default function App() {
 
             {/* SINGLE VARIETY TOP STICKY BANNER (Satisfying Request #3 & #4: Frozen at top-0 as user scrolls) */}
             {compareMode === 'multi' && selectedCommodityIds.length === 1 && selectedCommodity && (
-              <div className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border border-slate-200/80 shadow-md rounded-xl p-3.5 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-200">
-                <div className="flex flex-wrap items-center gap-3">
+              <div className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border border-slate-200/80 shadow-md rounded-xl p-2.5 mb-6 flex flex-row items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-200 overflow-x-auto whitespace-nowrap scrollbar-none">
+                <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
                   {/* Pulse Status indicator */}
-                  <span className="relative flex h-2 w-2">
+                  <span className="relative flex h-2 w-2 shrink-0">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
                   </span>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-nowrap">
                     <span className="font-sans font-black text-slate-950 text-base">
                       {selectedCommodity.name}
                     </span>
@@ -1035,7 +1035,7 @@ export default function App() {
                     </span>
                     <button 
                       onClick={() => toggleFavorite(selectedCommodity.id)}
-                      className="cursor-pointer p-1 rounded hover:bg-slate-100 transition-colors"
+                      className="cursor-pointer p-1 rounded hover:bg-slate-100 transition-colors shrink-0"
                       title="收藏/自选"
                     >
                       <Heart className={`w-4 h-4 ${favorites.includes(selectedCommodity.id) ? 'fill-rose-500 text-rose-500' : 'text-slate-300 hover:text-rose-500'}`} />
@@ -1043,7 +1043,7 @@ export default function App() {
                   </div>
 
                   {/* 沉淀资金 directly where the sector badge used to be */}
-                  <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md border border-slate-200 font-bold font-sans">
+                  <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md border border-slate-200 font-bold font-sans shrink-0">
                     沉淀资金: {selectedCommodity.openInterest.toFixed(1)} 亿
                   </span>
 
@@ -1051,30 +1051,30 @@ export default function App() {
                     const sig = getCommodityCustomSignal(selectedCommodity, signalConfig);
                     if (sig === 'long') {
                       return (
-                        <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 px-2.5 py-1 rounded-md font-sans font-extrabold text-[11px] border border-red-200 shadow-3xs">
+                        <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 px-2.5 py-1 rounded-md font-sans font-extrabold text-[11px] border border-red-200 shadow-3xs shrink-0">
                           <ArrowUpRight className="w-3.5 h-3.5 text-red-600 shrink-0" />
                           <span>偏多</span>
                         </span>
                       );
                     } else if (sig === 'short') {
                       return (
-                        <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2.5 py-1 rounded-md font-sans font-extrabold text-[11px] border border-green-200 shadow-3xs">
+                        <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2.5 py-1 rounded-md font-sans font-extrabold text-[11px] border border-green-200 shadow-3xs shrink-0">
                           <ArrowDownRight className="w-3.5 h-3.5 text-green-600 shrink-0" />
                           <span>偏少</span>
                         </span>
                       );
                     } else {
                       return (
-                        <span className="text-slate-400 font-mono font-bold text-[11px] bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-md">-</span>
+                        <span className="text-slate-400 font-mono font-bold text-[11px] bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-md shrink-0">-</span>
                       );
                     }
                   })()}
                 </div>
 
-                {/* Horizontal positions stats in a single responsive row */}
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs border-t md:border-t-0 border-slate-100 pt-2.5 md:pt-0">
+                {/* Horizontal positions stats in a single responsive row, forced flex-row flex-nowrap */}
+                <div className="flex flex-row flex-nowrap items-center gap-x-4 text-xs shrink-0 border-l border-slate-200 pl-4">
                   {/* Foreign */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-nowrap">
                     <span className="text-slate-500 font-bold">偏外资:</span>
                     <span className={`font-mono font-bold ${selectedCommodity.positions.foreign >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatFund(selectedCommodity.positions.foreign)}
@@ -1087,7 +1087,7 @@ export default function App() {
                       const flow = selectedCommodity.changes.foreign;
                       const { label, style } = getChgBehaviorLabelAndStyle(stock, flow);
                       return (
-                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${style}`}>
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold shrink-0 ${style}`}>
                           {label}
                         </span>
                       );
@@ -1095,7 +1095,7 @@ export default function App() {
                   </div>
 
                   {/* Institutional */}
-                  <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                  <div className="flex items-center gap-1.5 border-l border-slate-200 pl-4 shrink-0 flex-nowrap">
                     <span className="text-slate-500 font-bold">成交量前五:</span>
                     <span className={`font-mono font-bold ${selectedCommodity.positions.institutional >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatFund(selectedCommodity.positions.institutional)}
@@ -1108,7 +1108,7 @@ export default function App() {
                       const flow = selectedCommodity.changes.institutional;
                       const { label, style } = getChgBehaviorLabelAndStyle(stock, flow);
                       return (
-                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${style}`}>
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold shrink-0 ${style}`}>
                           {label}
                         </span>
                       );
@@ -1116,7 +1116,7 @@ export default function App() {
                   </div>
 
                   {/* Retail */}
-                  <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                  <div className="flex items-center gap-1.5 border-l border-slate-200 pl-4 shrink-0 flex-nowrap">
                     <span className="text-slate-500 font-bold">自定义:</span>
                     <span className={`font-mono font-bold ${selectedCommodity.positions.retail >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatFund(selectedCommodity.positions.retail)}
@@ -1129,7 +1129,7 @@ export default function App() {
                       const flow = selectedCommodity.changes.retail;
                       const { label, style } = getChgBehaviorLabelAndStyle(stock, flow);
                       return (
-                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${style}`}>
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold shrink-0 ${style}`}>
                           {label}
                         </span>
                       );
@@ -2022,19 +2022,19 @@ export default function App() {
               </button>
 
               {isCompareDrawerOpen && (
-                <div className="w-full lg:w-80 bg-white border border-slate-200 border-l-0 rounded-r-xl p-4 shadow-sm overflow-y-auto flex flex-col gap-4 animate-in slide-in-from-right-4 duration-200" id="section-compare-config-card">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <div className="flex items-center gap-1.5">
-                      <Sliders className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm font-black text-slate-900">筛选品种透视配置</span>
+                <div className="w-full lg:w-64 bg-white border border-slate-200 border-l-0 rounded-r-xl p-3 shadow-sm overflow-y-auto flex flex-col gap-3 animate-in slide-in-from-right-4 duration-200" id="section-compare-config-card">
+                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+                    <div className="flex items-center gap-1">
+                      <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                      <span className="text-xs font-black text-slate-900">筛选品种透视配置</span>
                     </div>
                   </div>
 
                   {/* Status and Summary */}
-                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
-                    <div className="flex justify-between items-center text-xs">
+                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-2">
+                    <div className="flex flex-col gap-0.5 text-[11px]">
                       <span className="text-slate-500 font-medium">筛选组合池:</span>
-                      <span className="font-mono font-bold text-blue-600">已选 {selectedCommodityIds.length} 个品种（全套 {rawCommodities.length} 品种）</span>
+                      <span className="font-mono font-bold text-blue-600">已选 {selectedCommodityIds.length} 个（共 {rawCommodities.length} 个）</span>
                     </div>
                   </div>
 
@@ -2096,60 +2096,67 @@ export default function App() {
                   </div>
 
                   {/* Checklist list of all commodities */}
-                  <div className="flex-1 overflow-y-auto pr-1 space-y-1.5 max-h-[380px] lg:max-h-none border-t border-b border-slate-100 py-3">
-                    {(() => {
-                      const sortedComms = [...rawCommodities].sort((a, b) => {
-                        const isCheckedA = selectedCommodityIds.includes(a.id);
-                        const isCheckedB = selectedCommodityIds.includes(b.id);
-                        if (isCheckedA && !isCheckedB) return -1;
-                        if (!isCheckedA && isCheckedB) return 1;
+                  <div className="flex-1 overflow-y-auto pr-1 max-h-[380px] lg:max-h-none border-t border-b border-slate-100 py-2">
+                    <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold px-1.5 py-0.5 bg-slate-50/80 border border-slate-100 rounded mb-1">
+                      <span>品种 / 板块</span>
+                      <span>三席总净 (外+五+自)</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      {(() => {
+                        const sortedComms = [...rawCommodities].sort((a, b) => {
+                          const isCheckedA = selectedCommodityIds.includes(a.id);
+                          const isCheckedB = selectedCommodityIds.includes(b.id);
+                          if (isCheckedA && !isCheckedB) return -1;
+                          if (!isCheckedA && isCheckedB) return 1;
 
-                        const magA = Math.abs(a.changes.foreign) + Math.abs(a.changes.institutional) + Math.abs(a.changes.retail);
-                        const magB = Math.abs(b.changes.foreign) + Math.abs(b.changes.institutional) + Math.abs(b.changes.retail);
-                        return magB - magA;
-                      });
-                      return sortedComms.map(c => {
-                        const isChecked = selectedCommodityIds.includes(c.id);
-                        return (
-                          <label
-                            key={c.id}
-                            className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all ${
-                              isChecked
-                                ? 'bg-blue-50/50 border-blue-200 text-blue-900 font-bold'
-                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => {
-                                  if (isChecked) {
-                                    if (selectedCommodityIds.length <= 1) return; // at least 1 must remain checked
-                                    setSelectedCommodityIds(prev => prev.filter(id => id !== c.id));
-                                  } else {
-                                    setSelectedCommodityIds(prev => [...prev, c.id]);
-                                  }
-                                }}
-                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
-                              />
-                              <div className="flex flex-col min-w-0">
-                                <span className="text-xs truncate">{c.name}</span>
-                                <span className="text-[9px] font-sans font-normal text-slate-400">{c.sector}</span>
+                          const magA = Math.abs(a.changes.foreign) + Math.abs(a.changes.institutional) + Math.abs(a.changes.retail);
+                          const magB = Math.abs(b.changes.foreign) + Math.abs(b.changes.institutional) + Math.abs(b.changes.retail);
+                          return magB - magA;
+                        });
+                        return sortedComms.map(c => {
+                          const isChecked = selectedCommodityIds.includes(c.id);
+                          const totalSeatPos = c.positions.foreign + c.positions.institutional + c.positions.retail;
+                          return (
+                            <label
+                              key={c.id}
+                              className={`flex items-center justify-between p-1 px-1.5 rounded-md border cursor-pointer transition-all ${
+                                isChecked
+                                  ? 'bg-blue-50/50 border-blue-200 text-blue-900 font-bold'
+                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    if (isChecked) {
+                                      if (selectedCommodityIds.length <= 1) return; // at least 1 must remain checked
+                                      setSelectedCommodityIds(prev => prev.filter(id => id !== c.id));
+                                    } else {
+                                      setSelectedCommodityIds(prev => [...prev, c.id]);
+                                    }
+                                  }}
+                                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3 w-3 cursor-pointer"
+                                />
+                                <div className="flex flex-col min-w-0 leading-none">
+                                  <span className="text-xs truncate">{c.name}</span>
+                                  <span className="text-[8px] font-sans font-normal text-slate-400 mt-0.5">{c.sector}</span>
+                                </div>
                               </div>
-                            </div>
-                            <span className={`font-mono text-[10px] px-1.5 py-0.2 rounded ${
-                              (c.positions.foreign + c.positions.institutional) >= 0
-                                ? 'bg-red-50 text-red-600'
-                                : 'bg-green-50 text-green-600'
-                            }`}>
-                              {(c.positions.foreign + c.positions.institutional) >= 0 ? '+' : ''}
-                              {(c.positions.foreign + c.positions.institutional).toFixed(1)}亿
-                            </span>
-                          </label>
-                        );
-                      });
-                    })()}
+                              <span className={`font-mono text-[9px] px-1 py-0.2 rounded shrink-0 ${
+                                totalSeatPos >= 0
+                                  ? 'bg-red-50 text-red-600'
+                                  : 'bg-green-50 text-green-600'
+                              }`}>
+                                {totalSeatPos >= 0 ? '+' : ''}
+                                {totalSeatPos.toFixed(1)}亿
+                              </span>
+                            </label>
+                          );
+                        });
+                      })()}
+                    </div>
                   </div>
                 </div>
               )}
