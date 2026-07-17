@@ -2022,7 +2022,7 @@ export default function App() {
               </button>
 
               {isCompareDrawerOpen && (
-                <div className="w-full lg:w-64 bg-white border border-slate-200 border-l-0 rounded-r-xl p-3 shadow-sm overflow-y-auto flex flex-col gap-3 animate-in slide-in-from-right-4 duration-200" id="section-compare-config-card">
+                <div className="w-full lg:w-56 bg-white border border-slate-200 border-l-0 rounded-r-xl p-3 shadow-sm overflow-y-auto flex flex-col gap-3 animate-in slide-in-from-right-4 duration-200" id="section-compare-config-card">
                   <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
                     <div className="flex items-center gap-1">
                       <Sliders className="w-3.5 h-3.5 text-blue-600" />
