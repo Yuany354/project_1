@@ -77,7 +77,6 @@ export default function SectorDirectionQuickView({
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">02</span>
           <h2 className="text-lg font-sans font-bold text-slate-900 tracking-tight">分类方向速览</h2>
-          <span className="text-xs text-slate-500 font-normal">| 细分板块持仓分布，点击卡片可联动筛选</span>
         </div>
         
         {selectedSector && (
@@ -91,7 +90,7 @@ export default function SectorDirectionQuickView({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {sectorData.map(sec => {
+        {sectorData.filter(sec => sec.commodities.length > 0).map(sec => {
           const isSelected = selectedSector === sec.name;
           return (
             <div
@@ -145,9 +144,6 @@ export default function SectorDirectionQuickView({
 
               {/* Commodities list inside */}
               <div className="mt-3">
-                <div className="text-[10px] text-slate-400 font-sans mb-1.5 truncate">
-                  {getSectorRepSymbols(sec.name)}
-                </div>
                 <div className="flex flex-wrap gap-1">
                   {sec.commodities.map(c => {
                     const isCommSelected = selectedCommodityId === c.id;

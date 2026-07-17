@@ -232,9 +232,6 @@ export default function InstitutionalConsistencyMap({
               <Crosshair className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
               当前视图: <span className="font-bold text-slate-800 font-sans">{axisNames.x}</span> × <span className="font-bold text-slate-800 font-sans">{axisNames.y}</span> (气泡越大，资金沉淀规模越高)
             </span>
-            <div className="text-slate-400 font-mono scale-95">
-              坐标极限: X(±{limits.x.toFixed(0)}亿) | Y(±{limits.y.toFixed(0)}亿)
-            </div>
           </div>
 
           {/* SVG canvas */}
@@ -246,6 +243,12 @@ export default function InstitutionalConsistencyMap({
               {/* Grid lines */}
               <line x1={padding} y1={height/2} x2={width-padding} y2={height/2} stroke="#cbd5e1" strokeDasharray="3,3" />
               <line x1={width/2} y1={padding} x2={width/2} y2={height-padding} stroke="#cbd5e1" strokeDasharray="3,3" />
+
+              {/* Axis adaptive limit labels on horizontal & vertical axes */}
+              <text x={padding - 6} y={height/2 + 3} textAnchor="end" className="fill-slate-500 font-bold font-sans text-[8.5px]">-{limits.x.toFixed(0)}亿</text>
+              <text x={width - padding + 6} y={height/2 + 3} textAnchor="start" className="fill-slate-500 font-bold font-sans text-[8.5px]">+{limits.x.toFixed(0)}亿</text>
+              <text x={width/2} y={padding - 8} textAnchor="middle" className="fill-slate-500 font-bold font-sans text-[8.5px]">+{limits.y.toFixed(0)}亿</text>
+              <text x={width/2} y={height - padding + 13} textAnchor="middle" className="fill-slate-500 font-bold font-sans text-[8.5px]">-{limits.y.toFixed(0)}亿</text>
 
               {/* Quadrant Titles (Faded background) */}
               <text x={width - padding - 10} y={padding + 15} textAnchor="end" className="fill-slate-400 font-sans font-bold text-[9px]">{axisNames.quadrants.tr}</text>

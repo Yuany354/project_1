@@ -25,6 +25,7 @@ import {
   Calendar, 
   Search,
   Star,
+  Heart,
   Layers,
   HelpCircle,
   FileText,
@@ -212,6 +213,27 @@ export default function App() {
 
   // Selected commodities for view/compare (single vs multiple)
   const [selectedCommodityIds, setSelectedCommodityIds] = useState<string[]>(['ZN']);
+  const [lastEffectiveDate, setLastEffectiveDate] = useState(effectiveDate);
+
+  // Initialize/reset to top 2 varieties with the largest position change magnitude on mount or date change
+  // Standard: Absolute sum of position changes across all three seat categories (|外资变动| + |机构变动| + |散户变动|)
+  useEffect(() => {
+    if (rawCommodities && rawCommodities.length > 1) {
+      const isInitial = selectedCommodityIds.length === 1 && selectedCommodityIds[0] === 'ZN';
+      const isDateChanged = effectiveDate !== lastEffectiveDate;
+      if (isInitial || isDateChanged) {
+        if (isDateChanged) {
+          setLastEffectiveDate(effectiveDate);
+        }
+        const sorted = [...rawCommodities].sort((a, b) => {
+          const magA = Math.abs(a.changes.foreign) + Math.abs(a.changes.institutional) + Math.abs(a.changes.retail);
+          const magB = Math.abs(b.changes.foreign) + Math.abs(b.changes.institutional) + Math.abs(b.changes.retail);
+          return magB - magA;
+        });
+        setSelectedCommodityIds([sorted[0].id, sorted[1].id]);
+      }
+    }
+  }, [rawCommodities, effectiveDate, lastEffectiveDate]);
 
   // Dynamic single selected commodity for deep view
   const selectedCommodity = useMemo(() => {
@@ -696,15 +718,7 @@ export default function App() {
                       自选品种透视
                     </button>
                   </div>
-                  {compareMode === 'multi' && (
-                    <button
-                      onClick={() => setIsCompareDrawerOpen(true)}
-                      className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer hover:scale-105 duration-150"
-                    >
-                      <Sliders className="w-3.5 h-3.5" />
-                      <span>配置筛选品种 ({selectedCommodityIds.length})</span>
-                    </button>
-                  )}
+                  {/* Removed orange configuration button since right drawer opens automatically */}
                   
                   <button
                     onClick={() => {
@@ -718,20 +732,8 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Right: Favorites Toggle & Search bar */}
+                {/* Right: Search bar */}
                 <div className="flex items-center gap-3">
-                  {/* Favorites Checkbox with whitespace-nowrap and solid spacing */}
-                  <label className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 px-3.5 py-1.5 rounded-lg border border-slate-200 cursor-pointer transition-colors text-xs text-slate-700 font-bold whitespace-nowrap shrink-0">
-                    <input 
-                      type="checkbox"
-                      checked={onlyShowFavorites}
-                      onChange={(e) => setOnlyShowFavorites(e.target.checked)}
-                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 bg-white h-3.5 w-3.5 cursor-pointer shrink-0"
-                    />
-                    <Star className={`w-3.5 h-3.5 shrink-0 ${onlyShowFavorites ? 'fill-yellow-500 text-yellow-500' : 'text-slate-400'}`} />
-                    <span className="whitespace-nowrap">仅自选</span>
-                  </label>
-
                   {/* Search box with solid width */}
                   <div className="relative shrink-0">
                     <input 
@@ -763,9 +765,6 @@ export default function App() {
                     max="2026-07-31"
                   />
                 </div>
-                <span className="text-[10px] text-slate-400 font-sans">
-                  提示：当前整个数据大屏的数据呈现均基于该选定交易日进行多维度套利与一致性穿透。支持跨月任意选择，系统将自适应匹配最契合的主力持仓底盘。
-                </span>
               </div>
 
               {/* Row 2: Signal Feature Selectors */}
@@ -872,17 +871,14 @@ export default function App() {
                           {/* Grid Header */}
                           <div className="grid grid-cols-12 bg-slate-50/50 border-b border-slate-200 font-bold text-slate-700 p-2.5">
                             <div className="col-span-4 text-left pl-2">席位类别</div>
-                            <div className="col-span-4 text-left pl-4">持仓存量筛选 (Stock)</div>
-                            <div className="col-span-4 text-left pl-4">资金流量筛选 (Flow)</div>
+                            <div className="col-span-4 text-left pl-4">持仓存量筛选</div>
+                            <div className="col-span-4 text-left pl-4">资金流量筛选</div>
                           </div>
 
                           {/* Row 1: 偏外资席位 */}
                           <div className="grid grid-cols-12 border-b border-slate-200 items-center">
                             <div className="col-span-4 bg-slate-50/10 p-3 font-bold text-slate-800 border-r border-slate-200 pl-4">
                               <div>偏外资席位</div>
-                              <p className="text-[10px] text-slate-400 font-normal mt-0.5 leading-normal">
-                                代表海外QFI等外资代理机构
-                              </p>
                             </div>
                             <div className="col-span-4 p-3 pl-4">
                               <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
@@ -918,9 +914,6 @@ export default function App() {
                           <div className="grid grid-cols-12 border-b border-slate-200 items-center">
                             <div className="col-span-4 bg-slate-50/10 p-3 font-bold text-slate-800 border-r border-slate-200 pl-4">
                               <div>成交量前五会员</div>
-                              <p className="text-[10px] text-slate-400 font-normal mt-0.5 leading-normal">
-                                代表市场交易最活跃的头部清算会员
-                              </p>
                             </div>
                             <div className="col-span-4 p-3 pl-4">
                               <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
@@ -956,9 +949,6 @@ export default function App() {
                           <div className="grid grid-cols-12 items-center">
                             <div className="col-span-4 bg-slate-50/10 p-3 font-bold text-slate-800 border-r border-slate-200 pl-4">
                               <div>用户自定义席位</div>
-                              <p className="text-[10px] text-slate-400 font-normal mt-0.5 leading-normal">
-                                代表用户自由定制筛选的一批特色公司席位
-                              </p>
                             </div>
                             <div className="col-span-4 p-3 pl-4">
                               <label className="flex items-center gap-2.5 cursor-pointer font-bold text-slate-850">
@@ -1048,12 +1038,13 @@ export default function App() {
                       className="cursor-pointer p-1 rounded hover:bg-slate-100 transition-colors"
                       title="收藏/自选"
                     >
-                      <Star className={`w-4 h-4 ${favorites.includes(selectedCommodity.id) ? 'fill-amber-400 text-amber-500' : 'text-slate-300 hover:text-amber-500'}`} />
+                      <Heart className={`w-4 h-4 ${favorites.includes(selectedCommodity.id) ? 'fill-rose-500 text-rose-500' : 'text-slate-300 hover:text-rose-500'}`} />
                     </button>
                   </div>
 
-                  <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200/60 font-medium font-sans">
-                    {selectedCommodity.sector}
+                  {/* 沉淀资金 directly where the sector badge used to be */}
+                  <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md border border-slate-200 font-bold font-sans">
+                    沉淀资金: {selectedCommodity.openInterest.toFixed(1)} 亿
                   </span>
 
                   {(() => {
@@ -1080,68 +1071,69 @@ export default function App() {
                   })()}
                 </div>
 
-                {/* Horizontal positions stats */}
+                {/* Horizontal positions stats in a single responsive row */}
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs border-t md:border-t-0 border-slate-100 pt-2.5 md:pt-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-400">沉淀资金:</span>
-                    <span className="font-mono font-black text-slate-800 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{selectedCommodity.openInterest.toFixed(1)} 亿</span>
-                  </div>
-
                   {/* Foreign */}
-                  <div className="flex items-center gap-2 border-l border-slate-100 pl-4">
-                    <span className="text-slate-400 flex items-center gap-0.5">
-                      <span>外资:</span>
-                      <Globe className="w-3.5 h-3.5 text-sky-600" />
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500 font-bold">偏外资:</span>
                     <span className={`font-mono font-bold ${selectedCommodity.positions.foreign >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatFund(selectedCommodity.positions.foreign)}
                     </span>
-                    <span className="font-mono text-[10px] text-slate-500 flex items-center gap-1">
-                      <span className={`px-1 rounded-xs text-[9px] font-bold ${getBehavior(selectedCommodity.positions.foreign, selectedCommodity.changes.foreign).bg}`}>
-                        {getBehavior(selectedCommodity.positions.foreign, selectedCommodity.changes.foreign).label}
-                      </span>
-                      <strong className={selectedCommodity.changes.foreign >= 0 ? 'text-red-600' : 'text-green-600'}>
-                        {selectedCommodity.changes.foreign >= 0 ? '+' : ''}{selectedCommodity.changes.foreign.toFixed(1)}亿
-                      </strong>
+                    <span className={`font-mono text-[10px] ${selectedCommodity.changes.foreign >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      ({selectedCommodity.changes.foreign >= 0 ? '+' : ''}{selectedCommodity.changes.foreign.toFixed(1)}亿)
                     </span>
+                    {(() => {
+                      const stock = selectedCommodity.positions.foreign;
+                      const flow = selectedCommodity.changes.foreign;
+                      const { label, style } = getChgBehaviorLabelAndStyle(stock, flow);
+                      return (
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${style}`}>
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Institutional */}
-                  <div className="flex items-center gap-2 border-l border-slate-100 pl-4">
-                    <span className="text-slate-400 flex items-center gap-0.5">
-                      <span>成交量前五:</span>
-                      <Building2 className="w-3.5 h-3.5 text-red-600" />
-                    </span>
+                  <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                    <span className="text-slate-500 font-bold">成交量前五:</span>
                     <span className={`font-mono font-bold ${selectedCommodity.positions.institutional >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatFund(selectedCommodity.positions.institutional)}
                     </span>
-                    <span className="font-mono text-[10px] text-slate-500 flex items-center gap-1">
-                      <span className={`px-1 rounded-xs text-[9px] font-bold ${getBehavior(selectedCommodity.positions.institutional, selectedCommodity.changes.institutional).bg}`}>
-                        {getBehavior(selectedCommodity.positions.institutional, selectedCommodity.changes.institutional).label}
-                      </span>
-                      <strong className={selectedCommodity.changes.institutional >= 0 ? 'text-red-600' : 'text-green-600'}>
-                        {selectedCommodity.changes.institutional >= 0 ? '+' : ''}{selectedCommodity.changes.institutional.toFixed(1)}亿
-                      </strong>
+                    <span className={`font-mono text-[10px] ${selectedCommodity.changes.institutional >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      ({selectedCommodity.changes.institutional >= 0 ? '+' : ''}{selectedCommodity.changes.institutional.toFixed(1)}亿)
                     </span>
+                    {(() => {
+                      const stock = selectedCommodity.positions.institutional;
+                      const flow = selectedCommodity.changes.institutional;
+                      const { label, style } = getChgBehaviorLabelAndStyle(stock, flow);
+                      return (
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${style}`}>
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Retail */}
-                  <div className="flex items-center gap-2 border-l border-slate-100 pl-4">
-                    <span className="text-slate-400 flex items-center gap-0.5">
-                      <span>自定:</span>
-                      <Users className="w-3.5 h-3.5 text-purple-600" />
-                    </span>
+                  <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                    <span className="text-slate-500 font-bold">自定义:</span>
                     <span className={`font-mono font-bold ${selectedCommodity.positions.retail >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatFund(selectedCommodity.positions.retail)}
                     </span>
-                    <span className="font-mono text-[10px] text-slate-500 flex items-center gap-1">
-                      <span className={`px-1 rounded-xs text-[9px] font-bold ${getBehavior(selectedCommodity.positions.retail, selectedCommodity.changes.retail).bg}`}>
-                        {getBehavior(selectedCommodity.positions.retail, selectedCommodity.changes.retail).label}
-                      </span>
-                      <strong className={selectedCommodity.changes.retail >= 0 ? 'text-red-600' : 'text-green-600'}>
-                        {selectedCommodity.changes.retail >= 0 ? '+' : ''}{selectedCommodity.changes.retail.toFixed(1)}亿
-                      </strong>
+                    <span className={`font-mono text-[10px] ${selectedCommodity.changes.retail >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      ({selectedCommodity.changes.retail >= 0 ? '+' : ''}{selectedCommodity.changes.retail.toFixed(1)}亿)
                     </span>
+                    {(() => {
+                      const stock = selectedCommodity.positions.retail;
+                      const flow = selectedCommodity.changes.retail;
+                      const { label, style } = getChgBehaviorLabelAndStyle(stock, flow);
+                      return (
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${style}`}>
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1190,22 +1182,28 @@ export default function App() {
 
             {/* 04. CORE VARIETY PANORAMA (Satisfies Request #3: Only keep core variety panorama table, remove top mover cards) */}
             <div className="mb-8" id="section-core-panorama">
-              <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 border-b border-slate-200 pb-2">
+              <div className="flex flex-col md:flex-row md:items-center justify-between mb-2 border-b border-slate-200 pb-2">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">04</span>
                   <h2 className="text-lg font-sans font-bold text-slate-900 tracking-tight">核心品种全景</h2>
-                  <span className="text-xs text-slate-500 font-normal">| 分门别类，一目了然，多维度穿透全市场持仓大单与博弈合力</span>
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3.5 mt-2 text-xs text-slate-500">
-                <div className="flex items-center gap-2">
-                  <Info className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span>
-                    <strong>⚠️ 合规声明：</strong>此「核心品种全景」展示的多空预警信号及强力关注状态由席位历史持仓变动与流量拟合而来。
-                    <span className="text-blue-700 font-bold">以用户实际选择为准，默认配置仅供示意，不代表公司任何投资观点，不作为交易决策。</span>
-                  </span>
-                </div>
+              {/* Legend definitions above the table */}
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                <span className="font-semibold text-slate-700">席位简写说明：</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
+                  <span><strong>外</strong> = 偏外资席位</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                  <span><strong>五</strong> = 成交量前五会员</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+                  <span><strong>定</strong> = 用户自定义席位</span>
+                </span>
               </div>
 
               <div className="bg-white border border-slate-200 rounded-lg overflow-visible shadow-sm mt-4">
@@ -1302,9 +1300,9 @@ export default function App() {
                             <td className={`p-3 pl-4 text-center sticky left-0 z-30 border-r border-slate-100 transition-colors ${isSelected ? 'bg-[#f1f6fe] group-hover:bg-[#e5effe]' : 'bg-white group-hover:bg-slate-50'}`}>
                               <button
                                 onClick={() => toggleFavorite(c.id)}
-                                className="cursor-pointer text-slate-300 hover:text-amber-500 transition-colors"
+                                className="cursor-pointer text-slate-300 hover:text-rose-500 transition-colors"
                               >
-                                <Star className={`w-4 h-4 ${isFavorited ? 'fill-amber-400 text-amber-500' : 'text-slate-300'}`} />
+                                <Heart className={`w-4 h-4 ${isFavorited ? 'fill-rose-500 text-rose-500' : 'text-slate-300'}`} />
                               </button>
                             </td>
 
@@ -1702,9 +1700,9 @@ export default function App() {
                                     e.stopPropagation();
                                     toggleFavorite(c.id);
                                   }}
-                                  className="p-1 rounded text-slate-300 hover:text-amber-500 transition-colors cursor-pointer"
+                                  className="p-1 rounded text-slate-300 hover:text-rose-500 transition-colors cursor-pointer"
                                 >
-                                  <Star className={`w-3.5 h-3.5 ${isFavorited ? 'fill-amber-400 text-amber-500' : ''}`} />
+                                  <Heart className={`w-3.5 h-3.5 ${isFavorited ? 'fill-rose-500 text-rose-500' : ''}`} />
                                 </button>
                               </td>
 
@@ -2003,21 +2001,21 @@ export default function App() {
               {/* Toggle handle button directly integrated on the left edge of the panel */}
               <button
                 onClick={() => setIsCompareDrawerOpen(!isCompareDrawerOpen)}
-                className="self-center bg-blue-600 hover:bg-blue-700 text-white rounded-l-xl py-4 px-1.5 cursor-pointer shadow-lg flex flex-col items-center justify-center w-6 h-24 transition-all hover:scale-105 border border-blue-500 z-50 shrink-0"
+                className="self-center bg-blue-600 hover:bg-blue-700 text-white rounded-l-xl py-4 px-1.5 cursor-pointer shadow-lg flex flex-col items-center justify-center w-6 h-28 transition-all hover:scale-105 border border-blue-500 z-50 shrink-0"
                 title={isCompareDrawerOpen ? "收起配置面板" : "展开配置面板"}
               >
                 {isCompareDrawerOpen ? (
                   <>
                     <ChevronRight className="w-4 h-4 text-white font-black" />
-                    <span className="text-[9px] font-black [writing-mode:vertical-lr] tracking-widest text-white mt-1">
-                      收起面板
+                    <span className="text-[10px] font-black [writing-mode:vertical-lr] tracking-widest text-white mt-1.5 whitespace-nowrap">
+                      收起（{selectedCommodityIds.length}）
                     </span>
                   </>
                 ) : (
                   <>
                     <ChevronLeft className="w-4 h-4 text-white font-black" />
-                    <span className="text-[9px] font-black [writing-mode:vertical-lr] tracking-widest text-white mt-1">
-                      展开面板
+                    <span className="text-[10px] font-black [writing-mode:vertical-lr] tracking-widest text-white mt-1.5 whitespace-nowrap">
+                      展开（{selectedCommodityIds.length}）
                     </span>
                   </>
                 )}
@@ -2034,13 +2032,10 @@ export default function App() {
 
                   {/* Status and Summary */}
                   <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
-                    <div className="flex justify-between items-center text-xs mb-1">
+                    <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-medium">筛选组合池:</span>
                       <span className="font-mono font-bold text-blue-600">已选 {selectedCommodityIds.length} 个品种（全套 {rawCommodities.length} 品种）</span>
                     </div>
-                    <p className="text-[10px] text-slate-400 leading-normal">
-                      在筛选品种模式下，图表及龙虎表将同步穿透展示已选品种。
-                    </p>
                   </div>
 
                   {/* Quick Select Buttons */}
@@ -2102,47 +2097,59 @@ export default function App() {
 
                   {/* Checklist list of all commodities */}
                   <div className="flex-1 overflow-y-auto pr-1 space-y-1.5 max-h-[380px] lg:max-h-none border-t border-b border-slate-100 py-3">
-                    {rawCommodities.map(c => {
-                      const isChecked = selectedCommodityIds.includes(c.id);
-                      return (
-                        <label
-                          key={c.id}
-                          className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all ${
-                            isChecked
-                              ? 'bg-blue-50/50 border-blue-200 text-blue-900 font-bold'
-                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => {
-                                if (isChecked) {
-                                  if (selectedCommodityIds.length <= 1) return; // at least 1 must remain checked
-                                  setSelectedCommodityIds(prev => prev.filter(id => id !== c.id));
-                                } else {
-                                  setSelectedCommodityIds(prev => [...prev, c.id]);
-                                }
-                              }}
-                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
-                            />
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-xs truncate">{c.name}</span>
-                              <span className="text-[9px] font-sans font-normal text-slate-400">{c.sector}</span>
+                    {(() => {
+                      const sortedComms = [...rawCommodities].sort((a, b) => {
+                        const isCheckedA = selectedCommodityIds.includes(a.id);
+                        const isCheckedB = selectedCommodityIds.includes(b.id);
+                        if (isCheckedA && !isCheckedB) return -1;
+                        if (!isCheckedA && isCheckedB) return 1;
+
+                        const magA = Math.abs(a.changes.foreign) + Math.abs(a.changes.institutional) + Math.abs(a.changes.retail);
+                        const magB = Math.abs(b.changes.foreign) + Math.abs(b.changes.institutional) + Math.abs(b.changes.retail);
+                        return magB - magA;
+                      });
+                      return sortedComms.map(c => {
+                        const isChecked = selectedCommodityIds.includes(c.id);
+                        return (
+                          <label
+                            key={c.id}
+                            className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all ${
+                              isChecked
+                                ? 'bg-blue-50/50 border-blue-200 text-blue-900 font-bold'
+                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  if (isChecked) {
+                                    if (selectedCommodityIds.length <= 1) return; // at least 1 must remain checked
+                                    setSelectedCommodityIds(prev => prev.filter(id => id !== c.id));
+                                  } else {
+                                    setSelectedCommodityIds(prev => [...prev, c.id]);
+                                  }
+                                }}
+                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                              />
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-xs truncate">{c.name}</span>
+                                <span className="text-[9px] font-sans font-normal text-slate-400">{c.sector}</span>
+                              </div>
                             </div>
-                          </div>
-                          <span className={`font-mono text-[10px] px-1.5 py-0.2 rounded ${
-                            (c.positions.foreign + c.positions.institutional) >= 0
-                              ? 'bg-red-50 text-red-600'
-                              : 'bg-green-50 text-green-600'
-                          }`}>
-                            {(c.positions.foreign + c.positions.institutional) >= 0 ? '+' : ''}
-                            {(c.positions.foreign + c.positions.institutional).toFixed(1)}亿
-                          </span>
-                        </label>
-                      );
-                    })}
+                            <span className={`font-mono text-[10px] px-1.5 py-0.2 rounded ${
+                              (c.positions.foreign + c.positions.institutional) >= 0
+                                ? 'bg-red-50 text-red-600'
+                                : 'bg-green-50 text-green-600'
+                            }`}>
+                              {(c.positions.foreign + c.positions.institutional) >= 0 ? '+' : ''}
+                              {(c.positions.foreign + c.positions.institutional).toFixed(1)}亿
+                            </span>
+                          </label>
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               )}

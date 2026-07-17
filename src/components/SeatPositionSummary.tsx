@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Globe, Building2, Users, AlertTriangle, ShieldCheck, HelpCircle } from 'lucide-react';
+import { Globe, Building2, Users, AlertTriangle, ShieldCheck, HelpCircle, ChevronDown } from 'lucide-react';
 import { Commodity } from '../types';
 import { getCommodityCustomSignal, isOriginalStrongSignal, SignalType, SignalConfig } from '../utils/signal';
 
@@ -107,17 +107,11 @@ export default function SeatPositionSummary({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">01</span>
           <h2 className="text-lg font-sans font-bold text-slate-900 tracking-tight">三类席位仓位摘要</h2>
-          {activeFilter ? (
+          {activeFilter && (
             <span className="text-[10px] font-sans font-bold bg-amber-500 text-white px-2 py-0.5 rounded shadow-xs animate-pulse">
               当前口径: {activeFilter === 'long' ? '自定义偏多' : activeFilter === 'short' ? '自定义偏空' : '全部自定义'} 信号 ({filteredCommoditiesForSummary.length}个品种)
             </span>
-          ) : (
-            <span className="text-xs text-slate-500 font-normal">| 透视偏外资、成交量前五会员及用户自定义席位的资金流向与持仓结构</span>
           )}
-        </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-1 md:mt-0">
-          <ShieldCheck className="w-3.5 h-3.5 text-red-600" />
-          <span>合规管理：持仓反向指标已更新为「席位一致性分歧指标」</span>
         </div>
       </div>
 
@@ -144,7 +138,6 @@ export default function SeatPositionSummary({
                 偏外资席位
                 <HelpCircle className="w-3 h-3 text-slate-400 cursor-pointer" />
               </span>
-              <span className="text-[10px] text-slate-400 block font-mono">FOREIGN SEATS (偏外资托管席位)</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative group/cfg">
@@ -198,7 +191,6 @@ export default function SeatPositionSummary({
                 成交量前五会员
                 <HelpCircle className="w-3 h-3 text-slate-400 cursor-pointer" />
               </span>
-              <span className="text-[10px] text-slate-400 block font-mono">TOP 5 VOLUME MEMBERS (前五大清算会员)</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative group/cfg">
@@ -238,36 +230,37 @@ export default function SeatPositionSummary({
         >
           {/* Hover calculation tooltip popover */}
           <div className="absolute left-0 right-0 bottom-full mb-2 hidden group-hover:block z-50 bg-slate-900 text-slate-100 p-3 rounded shadow-xl text-[11px] leading-relaxed max-w-xs mx-auto border border-slate-700">
-            <div className="font-bold text-purple-400 mb-1">用户自定义席位结算口径：</div>
+            <div className="font-bold text-slate-300 mb-1">用户自定义席位结算口径：</div>
             <p className="text-slate-300 mb-1.5">用户自定义筛选指定的席位公司持仓数据。默认各分类提供3家代表公司，可任意勾选并编辑分类名称。</p>
-            <div className="font-bold text-purple-400 mt-2 mb-1">当前该分类勾选公司:</div>
+            <div className="font-bold text-slate-300 mt-2 mb-1">当前该分类勾选公司:</div>
             <div className="text-slate-200 leading-normal bg-slate-850 p-1.5 rounded border border-slate-700/50 max-h-[100px] overflow-y-auto font-sans">
               {customCompanies.length > 0 ? customCompanies.join('、') : '暂无'}
             </div>
           </div>
 
           <div className="flex items-center justify-between text-slate-500 mb-1.5">
-            <div className="flex-1 min-w-0">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <span className="truncate">用户自定义席位</span>
-                <HelpCircle className="w-3 h-3 text-slate-400 cursor-pointer shrink-0" />
+            <div className="flex items-center gap-1 min-w-0 flex-1">
+              <span className="text-xs font-bold text-slate-800 shrink-0">
+                用户自定义：
               </span>
-              <span className="text-[10px] text-slate-400 block font-mono truncate">USER CUSTOM SEATS (用户自定义席位)</span>
+              <div className="relative inline-block min-w-[120px] max-w-[160px]">
+                <select
+                  value={activeCustomId}
+                  onChange={(e) => onSelectCustomSeat?.(e.target.value as 'custom1' | 'custom2' | 'custom3')}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full bg-slate-50 hover:bg-slate-100 text-slate-800 text-[11px] font-bold rounded pl-2 pr-6 py-0.5 border border-slate-300 focus:outline-none cursor-pointer transition-colors truncate appearance-none"
+                  title="选择在主页面呈现的自定义分类"
+                >
+                  <option value="custom1">{customSeatNames.custom1}</option>
+                  <option value="custom2">{customSeatNames.custom2}</option>
+                  <option value="custom3">{customSeatNames.custom3}</option>
+                </select>
+                <ChevronDown className="w-3 h-3 text-slate-500 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+              <HelpCircle className="w-3.5 h-3.5 text-slate-400 cursor-pointer shrink-0 ml-1" />
             </div>
-            <div className="flex items-center gap-2">
-              {/* Custom Category Dropdown selector */}
-              <select
-                value={activeCustomId}
-                onChange={(e) => onSelectCustomSeat?.(e.target.value as 'custom1' | 'custom2' | 'custom3')}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-black rounded px-1.5 py-0.5 border border-purple-200 focus:outline-none cursor-pointer transition-colors max-w-[120px]"
-                title="选择在主页面呈现的自定义分类"
-              >
-                <option value="custom1">🎯 {customSeatNames.custom1}</option>
-                <option value="custom2">🎯 {customSeatNames.custom2}</option>
-                <option value="custom3">🎯 {customSeatNames.custom3}</option>
-              </select>
-
+            
+            <div className="flex items-center gap-1.5 shrink-0 ml-2">
               <div className="relative group/cfg shrink-0">
                 <button 
                   className="p-1 hover:bg-slate-100 rounded transition-colors cursor-pointer"
@@ -277,7 +270,7 @@ export default function SeatPositionSummary({
                     if (onNavigateToFilter) onNavigateToFilter(activeCustomId);
                   }}
                 >
-                  <Users className="w-4 h-4 text-purple-500" />
+                  <Users className="w-4 h-4 text-slate-600 hover:text-slate-900" />
                 </button>
                 <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover/cfg:block bg-slate-950 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap z-50 font-sans pointer-events-none">
                   配置此席位
@@ -317,7 +310,6 @@ export default function SeatPositionSummary({
                   <HelpCircle className="w-3 h-3 text-slate-400 cursor-pointer" />
                 </span>
               </div>
-              <span className="text-[10px] text-slate-400 block font-mono">DIVERGENCE CONSENSUS</span>
             </div>
             <AlertTriangle className="w-4 h-4 text-amber-500 animate-pulse" />
           </div>
